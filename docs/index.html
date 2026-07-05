@@ -154,6 +154,29 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+// ===== EXTRACT CLIENT =====
+function extrairCliente(fields) {
+  // Tenta campos comuns de Organization no Jira Service Management
+  const orgFields = [fields.customfield_10002, fields.customfield_10109, fields.customfield_10004];
+  for (const orgField of orgFields) {
+    if (orgField) {
+      // Organization pode ser array de objetos com .name ou string
+      if (Array.isArray(orgField) && orgField.length > 0) {
+        const nome = orgField[0].name || orgField[0].value || orgField[0];
+        if (typeof nome === 'string' && nome.length > 0) return nome.replace(/,/g,' ');
+      }
+      if (typeof orgField === 'string' && orgField.length > 0) return orgField.replace(/,/g,' ');
+      if (orgField.name) return orgField.name.replace(/,/g,' ');
+      if (orgField.value) return orgField.value.replace(/,/g,' ');
+    }
+  }
+  // Fallback: parent summary (para epics/sub-tasks)
+  if (fields.parent && fields.parent.fields && fields.parent.fields.summary) {
+    return fields.parent.fields.summary.replace(/,/g,' ');
+  }
+  return '';
+}
+
 // ===== JIRA FETCH =====
 document.getElementById('btnBuscarJira').addEventListener('click', async () => {
   const email = document.getElementById('jiraEmail').value.trim() || localStorage.getItem('jiraEmail') || '';
@@ -171,7 +194,7 @@ document.getElementById('btnBuscarJira').addEventListener('click', async () => {
     const auth = btoa(email + ':' + token);
     const proxyUrl = document.getElementById('proxyUrl').value.trim() || localStorage.getItem('proxyUrl') || '';
     if (!proxyUrl) { showMsg('error','Configure a Proxy URL (Cloudflare Worker) nas configuracoes.'); btn.disabled=false; btn.textContent='\u{1F50D} Buscar Issues do Jira'; return; }
-    const jiraUrl = `https://${domain}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100&fields=summary,status,assignee,worklog,customfield_10002,parent`;
+    const jiraUrl = `https://${domain}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100&fields=summary,status,assignee,worklog,customfield_10002,customfield_10109,customfield_10004,parent,reporter`;
     const res = await fetch(`${proxyUrl}?url=${encodeURIComponent(jiraUrl)}`, { headers: { 'Authorization': 'Basic ' + auth, 'Accept': 'application/json' } });
     if (!res.ok) { const e = await res.text(); throw new Error('Jira retornou ' + res.status + ': ' + e.substring(0,200)); }
     const data = await res.json();
@@ -186,7 +209,7 @@ document.getElementById('btnBuscarJira').addEventListener('click', async () => {
       const status = f.status ? f.status.name : '';
       const assignee = f.assignee ? f.assignee.displayName : 'Nao atribuido';
       const link = `https://${domain}/browse/${issue.key}`;
-      const cliente = f.parent ? (f.parent.fields?.summary || '').replace(/,/g,' ') : (f.customfield_10002 || '');
+      const cliente = extrairCliente(f);
       const worklogs = f.worklog ? f.worklog.worklogs || [] : [];
       if (worklogs.length > 0) {
         for (const wl of worklogs) {
