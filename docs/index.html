@@ -79,6 +79,7 @@ app.innerHTML = `
     <div class="field"><label>Email Jira (para integracao)</label><input type="email" id="jiraEmail" placeholder="seu.email@empresa.com"></div>
     <div class="field"><label>Jira API Token</label><input type="password" id="jiraToken" placeholder="Token gerado em id.atlassian.com"><p class="hint">Gere em <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">id.atlassian.com</a></p></div>
     <div class="field"><label>Dominio Jira</label><input type="text" id="jiraDomain" value="clouddog.atlassian.net" placeholder="empresa.atlassian.net"></div>
+    <div class="field"><label>Proxy URL (Cloudflare Worker)</label><input type="text" id="proxyUrl" placeholder="https://seu-worker.workers.dev"><p class="hint">Necessario para buscar do Jira. Veja instrucoes em worker/worker.js</p></div>
     <button type="button" id="btnSalvarCfg" style="background:#f26522;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600">Salvar Configuracoes</button>
   </div>
 </details>
@@ -109,7 +110,7 @@ app.innerHTML = `
 `;
 
 // ===== CONFIG =====
-const fields = ['geminiKey','jiraEmail','jiraToken','jiraDomain'];
+const fields = ['geminiKey','jiraEmail','jiraToken','jiraDomain','proxyUrl'];
 fields.forEach(id => {
   const el = document.getElementById(id);
   const saved = localStorage.getItem(id);
@@ -153,8 +154,10 @@ document.getElementById('btnBuscarJira').addEventListener('click', async () => {
 
   try {
     const auth = btoa(email + ':' + token);
-    const url = `https://${domain}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100&fields=summary,status,assignee,worklog,customfield_10002,parent`;
-    const res = await fetch(url, { headers: { 'Authorization': 'Basic ' + auth, 'Accept': 'application/json' } });
+    const proxyUrl = document.getElementById('proxyUrl').value.trim() || localStorage.getItem('proxyUrl') || '';
+    if (!proxyUrl) { showMsg('error','Configure a Proxy URL (Cloudflare Worker) nas configuracoes.'); btn.disabled=false; btn.textContent='\u{1F50D} Buscar Issues do Jira'; return; }
+    const jiraUrl = `https://${domain}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=100&fields=summary,status,assignee,worklog,customfield_10002,parent`;
+    const res = await fetch(`${proxyUrl}?url=${encodeURIComponent(jiraUrl)}`, { headers: { 'Authorization': 'Basic ' + auth, 'Accept': 'application/json' } });
     if (!res.ok) { const e = await res.text(); throw new Error('Jira retornou ' + res.status + ': ' + e.substring(0,200)); }
     const data = await res.json();
     const issues = data.issues || [];
