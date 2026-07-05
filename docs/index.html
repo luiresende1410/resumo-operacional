@@ -272,11 +272,22 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     userPrompt += '\n\nGere o relatorio completo com o bloco ---METRICAS_JSON--- ao final.';
 
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: userPrompt,
-      config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
-    });
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    let response = null;
+    for (const modelo of models) {
+      try {
+        btn.textContent = '\u23F3 Gerando com ' + modelo + '...';
+        response = await ai.models.generateContent({
+          model: modelo,
+          contents: userPrompt,
+          config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
+        });
+        if (response.text) break;
+      } catch (modelErr) {
+        console.warn('Modelo ' + modelo + ' falhou:', modelErr.message);
+        if (modelo === models[models.length - 1]) throw modelErr;
+      }
+    }
 
     const textoCompleto = response.text;
     if (!textoCompleto) throw new Error('Gemini nao retornou resposta.');
