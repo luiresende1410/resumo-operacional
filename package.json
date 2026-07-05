@@ -1,0 +1,20 @@
+{
+  "name": "relatorio-semanal",
+  "version": "2.0.0",
+  "description": "Gerador automático de relatório gerencial e dashboard a partir de CSV do Jira",
+  "type": "module",
+  "main": "gerar-relatorio.js",
+  "scripts": {
+    "start": "node server.js",
+    "gerar": "node gerar-relatorio.js",
+    "exemplo": "node gerar-relatorio.js --csv exemplo.csv"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "csv-parse": "^5.5.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1"
+  }
+}

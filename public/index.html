@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumo Operacional - Cloud Management Services</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      padding: 20px 32px;
+      gap: 20px;
+      border-bottom: 1px solid #333;
+    }
+
+    .logo {
+      width: 56px;
+      height: 56px;
+      background: #f26522;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .logo span {
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 900;
+      color: white;
+      letter-spacing: 1px;
+      line-height: 1.2;
+    }
+
+    .header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+      margin: 32px auto;
+      padding: 0 24px;
+      flex: 1;
+    }
+
+    .field {
+      margin-bottom: 24px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #ccc;
+      margin-bottom: 8px;
+    }
+
+    .field textarea {
+      width: 100%;
+      min-height: 120px;
+      background: #2d2d2d;
+      border: 1px solid #555;
+      border-radius: 6px;
+      color: #e0e0e0;
+      padding: 12px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    .field textarea:focus {
+      outline: none;
+      border-color: #f26522;
+    }
+
+    .field textarea::placeholder {
+      color: #666;
+    }
+
+    .field input[type="file"] {
+      background: #2d2d2d;
+      border: 1px solid #555;
+      border-radius: 6px;
+      color: #e0e0e0;
+      padding: 12px;
+      width: 100%;
+      cursor: pointer;
+    }
+
+    .field input[type="file"]::-webkit-file-upload-button {
+      background: #f26522;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 12px;
+    }
+
+    .btn-gerar {
+      background: #f26522;
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 24px;
+    }
+
+    .btn-gerar:hover:not(:disabled) {
+      background: #e05a1a;
+    }
+
+    .btn-gerar:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .msg {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .msg.error {
+      background: #3a1a1a;
+      border: 1px solid #dc2626;
+      color: #fca5a5;
+    }
+
+    .msg.success {
+      background: #1a2e1a;
+      border: 1px solid #16a34a;
+      color: #86efac;
+    }
+
+    .msg.info {
+      background: #1a1a2e;
+      border: 1px solid #2563eb;
+      color: #93c5fd;
+    }
+
+    .resultado {
+      display: none;
+      margin-bottom: 32px;
+    }
+
+    .resultado.visible {
+      display: block;
+    }
+
+    .resultado h3 {
+      font-size: 0.95rem;
+      color: #ccc;
+      margin-bottom: 12px;
+    }
+
+    .resultado-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .resultado-actions button {
+      background: #2d2d2d;
+      border: 1px solid #555;
+      color: #e0e0e0;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .resultado-actions button:hover {
+      border-color: #f26522;
+    }
+
+    .resultado pre {
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 16px;
+      max-height: 500px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #ccc;
+    }
+
+    .footer {
+      padding: 12px 32px;
+      border-top: 3px solid #f26522;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .footer .logo-sm {
+      width: 32px;
+      height: 32px;
+      background: #f26522;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .footer .logo-sm span {
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-size: 6px;
+      font-weight: 900;
+      color: white;
+      line-height: 1.1;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">
+      <span>CLOUD</span>
+      <span>DOG</span>
+    </div>
+    <h1>Resumo Operacional - Cloud Management Services</h1>
+  </div>
+
+  <div class="container">
+    <form id="form">
+      <div class="field">
+        <label>📄 Arquivo CSV (exportado do Jira)</label>
+        <input type="file" id="csvFile" accept=".csv">
+      </div>
+
+      <div class="field">
+        <label>🏢 Destaques de Clientes</label>
+        <textarea id="destaquesClientes" placeholder="Informe contextos relevantes sobre clientes da semana (opcional).&#10;Exemplo:&#10;- ACME: iniciamos migração crítica para nova região&#10;- BETA: incidente resolvido em menos de 30min"></textarea>
+      </div>
+
+      <div class="field">
+        <label>👤 Destaques de Profissionais</label>
+        <textarea id="destaquesProfissionais" placeholder="Informe destaques sobre a equipe (opcional).&#10;Exemplo:&#10;- João: liderou a resposta ao incidente&#10;- Maria: entregou documentação antes do prazo"></textarea>
+      </div>
+
+      <button type="submit" class="btn-gerar" id="btnGerar">⚡ Gerar Relatório</button>
+    </form>
+
+    <div class="msg" id="msg"></div>
+
+    <div class="resultado" id="resultado">
+      <h3>✅ Relatório Gerado</h3>
+      <div class="resultado-actions">
+        <button type="button" id="btnCopiar">📋 Copiar Texto</button>
+        <button type="button" id="btnBaixarMd">📝 Baixar .md</button>
+        <button type="button" id="btnAbrirDash">📊 Abrir Dashboard</button>
+      </div>
+      <pre id="relatorioTexto"></pre>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="logo-sm">
+      <span>CLOUD</span>
+      <span>DOG</span>
+    </div>
+  </div>
+
+  <script>
+    var form = document.getElementById('form');
+    var msg = document.getElementById('msg');
+    var resultado = document.getElementById('resultado');
+    var relatorioTexto = document.getElementById('relatorioTexto');
+    var btnGerar = document.getElementById('btnGerar');
+    var dashboardHTML = null;
+    var relatorioMd = null;
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      console.log('Form submitted');
+
+      var fileInput = document.getElementById('csvFile');
+      if (!fileInput.files || !fileInput.files[0]) {
+        showMsg('error', '❌ Selecione um arquivo CSV antes de gerar.');
+        return;
+      }
+
+      btnGerar.disabled = true;
+      btnGerar.textContent = '⏳ Gerando... (pode levar até 1 minuto)';
+      hideMsg();
+      resultado.classList.remove('visible');
+
+      var formData = new FormData();
+      formData.append('csv', fileInput.files[0]);
+      formData.append('destaquesClientes', document.getElementById('destaquesClientes').value);
+      formData.append('destaquesProfissionais', document.getElementById('destaquesProfissionais').value);
+
+      fetch('/api/gerar', { method: 'POST', body: formData })
+        .then(function(response) {
+          return response.json().then(function(data) {
+            if (!response.ok) {
+              throw new Error(data.error || 'Erro desconhecido (HTTP ' + response.status + ')');
+            }
+            return data;
+          });
+        })
+        .then(function(data) {
+          relatorioMd = data.relatorio;
+          dashboardHTML = data.dashboardHTML;
+          relatorioTexto.textContent = relatorioMd;
+          resultado.classList.add('visible');
+          showMsg('success', '✅ Relatório gerado! ' + data.totalRegistros + ' atividades processadas.');
+        })
+        .catch(function(err) {
+          console.error('Erro:', err);
+          showMsg('error', '❌ ' + err.message);
+        })
+        .finally(function() {
+          btnGerar.disabled = false;
+          btnGerar.textContent = '⚡ Gerar Relatório';
+        });
+    });
+
+    document.getElementById('btnCopiar').addEventListener('click', function() {
+      if (relatorioMd) {
+        navigator.clipboard.writeText(relatorioMd).then(function() {
+          showMsg('success', '📋 Copiado para a área de transferência!');
+        });
+      }
+    });
+
+    document.getElementById('btnBaixarMd').addEventListener('click', function() {
+      if (relatorioMd) {
+        var data = new Date().toISOString().split('T')[0];
+        download(relatorioMd, 'relatorio-' + data + '.md', 'text/markdown');
+      }
+    });
+
+    document.getElementById('btnAbrirDash').addEventListener('click', function() {
+      if (dashboardHTML) {
+        var blob = new Blob([dashboardHTML], { type: 'text/html' });
+        var url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      }
+    });
+
+    function showMsg(type, text) {
+      msg.style.display = 'block';
+      msg.className = 'msg ' + type;
+      msg.textContent = text;
+    }
+
+    function hideMsg() {
+      msg.style.display = 'none';
+      msg.className = 'msg';
+      msg.textContent = '';
+    }
+
+    function download(content, filename, type) {
+      var blob = new Blob([content], { type: type });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  </script>
+</body>
+</html>

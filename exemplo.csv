@@ -1,0 +1,16 @@
+Data,Cliente,Resumo,Nome,Comentário,Link,Status,Horas
+01/07/2026,ACME CORP,Revisão de políticas IAM e MFA,João Silva,Auditoria completa de acessos,https://jira.example.com/ACME-101,Concluído,4
+01/07/2026,ACME CORP,Configuração de alertas CloudWatch,João Silva,Alarmes de CPU e memória,https://jira.example.com/ACME-102,Concluído,2
+01/07/2026,BETA LTDA,Incident - API fora do ar,Maria Souza,Reset do Apache e análise de logs,https://jira.example.com/BETA-050,Concluído,3
+02/07/2026,BETA LTDA,Documentação de runbook pós-incidente,Maria Souza,Runbook criado no Confluence,https://jira.example.com/BETA-051,Concluído,2
+02/07/2026,GAMMA SA,Rightsizing de instâncias EC2,Carlos Oliveira,Redução de m5.xlarge para m5.large em staging,https://jira.example.com/GAMMA-200,Concluído,3
+02/07/2026,GAMMA SA,Exclusão de volumes EBS ociosos,Carlos Oliveira,12 volumes removidos - saving estimado $320/mês,https://jira.example.com/GAMMA-201,Concluído,1.5
+03/07/2026,ACME CORP,Migração de VPN site-to-site para Transit Gateway,João Silva,Fase 1 - planejamento e validação,https://jira.example.com/ACME-110,Em andamento,5
+03/07/2026,DELTA INC,Deploy de Datadog agent em produção,Maria Souza,Instalação em 8 instâncias,https://jira.example.com/DELTA-080,Concluído,3
+03/07/2026,DELTA INC,Configuração de dashboards Datadog,Maria Souza,Dashboard de latência e error rate,https://jira.example.com/DELTA-081,Concluído,2
+04/07/2026,GAMMA SA,Implementação de lifecycle policies S3,Carlos Oliveira,Transição Glacier após 90 dias,https://jira.example.com/GAMMA-210,Concluído,2
+04/07/2026,ACME CORP,Hardening de Security Groups,João Silva,Remoção de regras 0.0.0.0/0 em 5 SGs,https://jira.example.com/ACME-115,Concluído,3
+04/07/2026,BETA LTDA,Atualização de patches de segurança,Maria Souza,Patching de 12 servidores Linux,https://jira.example.com/BETA-060,Concluído,4
+05/07/2026,EPSILON SA,Análise de custo e recomendações FinOps,Carlos Oliveira,Relatório mensal com savings de $1.2k identificados,https://jira.example.com/EPS-010,Concluído,3
+05/07/2026,EPSILON SA,Reserva de instâncias recomendada,Carlos Oliveira,3x RI para workloads estáveis,https://jira.example.com/EPS-011,Em andamento,1.5
+05/07/2026,DELTA INC,Criação de alertas de anomalia,Maria Souza,ML-based anomaly detection no Datadog,https://jira.example.com/DELTA-085,Concluído,2
