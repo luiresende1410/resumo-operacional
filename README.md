@@ -54,16 +54,26 @@ node gerar-relatorio.js --csv atividades.csv --obs "Semana com foco em seguranç
 | `--obs <texto>` | Observações extras para contextualizar o relatório | — |
 | `--output <pasta>` | Pasta onde salvar os arquivos | `output` |
 | `--modelo <modelo>` | Modelo do Gemini | `gemini-2.5-flash` |
+| `--html` | Gerar também o relatório HTML estilizado com navegação lateral | — |
 
 ### Saída
 
-Após a execução, dois arquivos são criados na pasta `output/`:
+Após a execução, dois arquivos são criados na pasta `output/` (três se usar `--html`):
 
 ```
 output/
 ├── relatorio-2026-07-05.md      ← Relatório gerencial completo
-└── dashboard-2026-07-05.html    ← Dashboard visual com gráficos
+├── dashboard-2026-07-05.html    ← Dashboard visual com gráficos
+└── relatorio-2026-07-05.html    ← Relatório HTML estilizado (com --html)
 ```
+
+### Gerar relatório visual completo (HTML)
+
+```bash
+node gerar-relatorio.js --csv atividades.csv --html
+```
+
+Isso gera uma página HTML com navegação lateral, seções estruturadas (Sumário Executivo, Esforço Operacional, Segurança, FinOps, Modernização, Observabilidade, Relacionamento e Profissionais), gráficos interativos e tabelas estilizadas — ideal para apresentação.
 
 ## Testar com dados de exemplo
 

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Resumo Operacional - Cloud Management Services</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#1a1a1a;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column}
@@ -12,7 +15,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{width:56px;height:56px;background:#f26522;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
 .logo span{font-family:'Arial Black',Arial,sans-serif;font-size:11px;font-weight:900;color:white;letter-spacing:1px;line-height:1.2}
 .header h1{font-size:1.4rem;font-weight:700;color:#fff}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.user-info{display:flex;align-items:center;gap:8px;font-size:.8rem;color:#aaa}
+.user-info img{width:28px;height:28px;border-radius:50%}
+.btn-logout{background:none;border:1px solid #555;color:#ccc;padding:6px 12px;border-radius:4px;font-size:.75rem;cursor:pointer}
+.btn-logout:hover{border-color:#f26522;color:#f26522}
 .container{max-width:860px;width:100%;margin:32px auto;padding:0 24px;flex:1}
+
+/* Login screen */
+.login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center}
+.login-screen .logo-big{width:80px;height:80px;background:#f26522;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:24px}
+.login-screen .logo-big span{font-family:'Arial Black',Arial,sans-serif;font-size:14px;font-weight:900;color:white;line-height:1.2}
+.login-screen h2{font-size:1.3rem;margin-bottom:8px;color:#fff}
+.login-screen p{font-size:.9rem;color:#888;margin-bottom:24px}
+.btn-google{display:flex;align-items:center;gap:12px;background:#fff;color:#333;border:none;padding:14px 28px;border-radius:8px;font-size:.95rem;font-weight:600;cursor:pointer;transition:box-shadow .2s}
+.btn-google:hover{box-shadow:0 4px 12px rgba(242,101,34,.3)}
+.btn-google svg{width:20px;height:20px}
+.login-error{color:#fca5a5;font-size:.85rem;margin-top:16px;display:none}
+
 .field{margin-bottom:20px}
 .field label{display:block;font-size:.9rem;font-weight:600;color:#ccc;margin-bottom:6px}
 .field textarea,.field input[type=text],.field input[type=password],.field input[type=email]{width:100%;background:#2d2d2d;border:1px solid #555;border-radius:6px;color:#e0e0e0;padding:12px;font-size:.9rem;font-family:inherit}
@@ -28,11 +48,84 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="header">
 <div class="logo"><span>CLOUD</span><span>DOG</span></div>
 <h1>Resumo Operacional - Cloud Management Services</h1>
+<div class="header-right" id="headerRight" style="display:none">
+  <div class="user-info"><img id="userPhoto" src="" alt=""><span id="userName"></span></div>
+  <button class="btn-logout" id="btnLogout">Sair</button>
+</div>
 </div>
 <div class="container" id="app"></div>
 <div class="footer"><div class="logo-sm"><span>CLOUD</span><span>DOG</span></div></div>
-</body>
-</html>
+
+<script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyC72bXxTfYREj09h8K-WXo9G4S6atxSlc8",
+    authDomain: "resumo-semanal-e61f0.firebaseapp.com",
+    projectId: "resumo-semanal-e61f0",
+    storageBucket: "resumo-semanal-e61f0.firebasestorage.app",
+    messagingSenderId: "845737962348",
+    appId: "1:845737962348:web:1cce9b2ee2e74a5ede6149",
+    measurementId: "G-ZVBGFKDKLL"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const provider = new firebase.auth.GoogleAuthProvider();
+  // Restringe o popup de login para contas @clouddog.com.br
+  provider.setCustomParameters({ hd: 'clouddog.com.br' });
+
+  const ALLOWED_DOMAIN = 'clouddog.com.br';
+
+  function showLogin() {
+    document.getElementById('app').innerHTML = `
+      <div class="login-screen">
+        <div class="logo-big"><span>CLOUD</span><span>DOG</span></div>
+        <h2>Resumo Operacional</h2>
+        <p>Acesso restrito a colaboradores CloudDog</p>
+        <button class="btn-google" id="btnGoogleLogin">
+          <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Entrar com Google
+        </button>
+        <p class="login-error" id="loginError"></p>
+      </div>
+    `;
+    document.getElementById('btnGoogleLogin').addEventListener('click', doLogin);
+    document.getElementById('headerRight').style.display = 'none';
+  }
+
+  async function doLogin() {
+    const errorEl = document.getElementById('loginError');
+    errorEl.style.display = 'none';
+    try {
+      const result = await auth.signInWithPopup(provider);
+      const email = result.user.email || '';
+      if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
+        await auth.signOut();
+        errorEl.textContent = 'Acesso permitido apenas para emails @clouddog.com.br';
+        errorEl.style.display = 'block';
+        return;
+      }
+    } catch (err) {
+      errorEl.textContent = 'Erro ao fazer login: ' + (err.message || err);
+      errorEl.style.display = 'block';
+    }
+  }
+
+  // Observador de estado de auth
+  auth.onAuthStateChanged((user) => {
+    if (user && user.email && user.email.endsWith('@' + ALLOWED_DOMAIN)) {
+      document.getElementById('headerRight').style.display = 'flex';
+      document.getElementById('userPhoto').src = user.photoURL || '';
+      document.getElementById('userName').textContent = user.displayName || user.email;
+      initApp();
+    } else {
+      if (user) auth.signOut(); // domínio inválido
+      showLogin();
+    }
+  });
+
+  document.getElementById('btnLogout').addEventListener('click', () => auth.signOut());
+</script>
 <style>
 .config-box{background:#2a2015;border:1px solid #f2652244;border-radius:6px;padding:16px;margin-bottom:24px}
 .config-box summary{cursor:pointer;font-size:.85rem;color:#f26522;font-weight:600}
@@ -79,6 +172,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <script type="module">
 import { GoogleGenAI } from 'https://esm.run/@google/genai';
 
+// Expor initApp para o script de auth chamar
+window.initApp = function() {
+
 const app = document.getElementById('app');
 app.innerHTML = `
 <details class="config-box" id="cfgBox">
@@ -107,6 +203,7 @@ app.innerHTML = `
 <div class="field"><label>&#x1F3E2; Destaques de Clientes</label><textarea id="destaquesClientes" placeholder="Contextos relevantes sobre clientes (opcional)"></textarea></div>
 <div class="field"><label>&#x1F464; Destaques de Profissionais</label><textarea id="destaquesProfissionais" placeholder="Destaques sobre a equipe (opcional)"></textarea></div>
 <button type="button" id="btnGerar" class="btn-gerar">&#x26A1; Gerar Relatorio</button>
+<button type="button" id="btnGerarHTML" class="btn-gerar" style="background:#2563eb;margin-top:8px">&#x1F3A8; Gerar Relatorio Visual (HTML)</button>
 <div class="msg" id="msg"></div>
 <div class="resultado" id="resultado">
   <div class="resultado-actions">
@@ -114,6 +211,7 @@ app.innerHTML = `
     <button type="button" id="btnBaixarMd">&#x1F4DD; Baixar .md</button>
     <button type="button" id="btnBaixarPdf">&#x1F4C4; Exportar PDF</button>
     <button type="button" id="btnAbrirDash">&#x1F4CA; Abrir Dashboard</button>
+    <button type="button" id="btnAbrirVisual">&#x1F3A8; Abrir Visual</button>
     <button type="button" id="btnSalvarRelatorio">&#x1F4BE; Salvar Relatorio</button>
   </div>
   <div class="relatorio-html" id="relatorioHtml"></div>
@@ -278,6 +376,7 @@ Apos o relatorio, adicione "---METRICAS_JSON---" seguido de um JSON valido (sem 
 // ===== GERAR RELATORIO =====
 let relatorioMd = null;
 let dashboardHTMLResult = null;
+let relatorioVisualHTML = null;
 
 document.getElementById('btnGerar').addEventListener('click', async () => {
   const apiKey = document.getElementById('geminiKey').value.trim() || localStorage.getItem('geminiKey') || '';
@@ -383,6 +482,75 @@ document.getElementById('btnSalvarRelatorio').addEventListener('click', () => {
   renderHistorico();
 });
 
+// ===== RELATORIO VISUAL HTML =====
+document.getElementById('btnAbrirVisual').addEventListener('click', () => {
+  if (relatorioVisualHTML) { const b=new Blob([relatorioVisualHTML],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
+  else { showMsg('error','Gere o relatorio visual primeiro (botao azul).'); }
+});
+
+const RELATORIO_HTML_PROMPT = `Voce e um Especialista em Operacoes de Cloud e Lider de SRE. Transforme atividades tecnicas em um JSON estruturado para relatorio gerencial.
+
+IMPORTANTE: Responda APENAS com JSON valido. Sem markdown, sem crases, sem texto adicional.
+
+Estrutura:
+{"periodo":"DD/MM a DD/MM","sumarioExecutivo":{"texto":"Paragrafo resumo...","focoEstrategico":"Paragrafo expandido..."},"distribuicaoEsforco":{"pilares":[{"nome":"Seguranca e Governanca","percentual":0,"descricao":"..."},{"nome":"Infraestrutura / DevOps","percentual":0,"descricao":"..."},{"nome":"Sustentacao e Incidentes","percentual":0,"descricao":"..."},{"nome":"FinOps / Otimizacao de Custos","percentual":0,"descricao":"..."}]},"seguranca":[{"cliente":"NOME","titulo":"Titulo","descricao":"Descricao impacto"}],"finops":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"modernizacao":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"observabilidade":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"relacionamento":[{"cliente":"NOME","status":"Positivo|Em evolucao|Critico","destaque":"..."}],"profissionais":[{"nome":"Nome Completo","iniciais":"NC","descricao":"Reconhecimento..."}],"metricas":{"totalAtividades":0,"totalHoras":0,"horasPorCliente":{},"horasPorProfissional":{},"atividadesPorStatus":{},"topClientes":[]}}
+
+Regras: Percentuais somam 100%. 3-7 itens por pilar. 2-4 em relacionamento. Um por profissional. Clientes em CAIXA ALTA. Traduza termos tecnicos para impactos de negocio.`;
+
+document.getElementById('btnGerarHTML').addEventListener('click', async () => {
+  const apiKey = document.getElementById('geminiKey').value.trim() || localStorage.getItem('geminiKey') || '';
+  if (!apiKey) { showMsg('error','Informe a API Key do Gemini nas configuracoes.'); document.getElementById('cfgBox').setAttribute('open',''); return; }
+
+  let csvRaw = '';
+  if (activeSource === 'csv') {
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files || !fileInput.files[0]) { showMsg('error','Selecione um arquivo CSV.'); return; }
+    csvRaw = await fileInput.files[0].text();
+  } else {
+    if (!jiraCsvData) { showMsg('error','Busque as issues do Jira primeiro.'); return; }
+    csvRaw = jiraCsvData;
+  }
+
+  const btn = document.getElementById('btnGerarHTML');
+  btn.disabled = true; btn.textContent = '\u23F3 Gerando relatorio visual...';
+  hideMsg();
+
+  try {
+    const destClientes = document.getElementById('destaquesClientes').value;
+    const destProf = document.getElementById('destaquesProfissionais').value;
+    let obs = '';
+    if (destClientes.trim()) obs += 'Destaques de Clientes:\n' + destClientes + '\n\n';
+    if (destProf.trim()) obs += 'Destaques de Profissionais:\n' + destProf + '\n\n';
+
+    let userPrompt = 'Lista de atividades (CSV):\n\n' + csvRaw;
+    if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
+    userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: userPrompt,
+      config: { systemInstruction: RELATORIO_HTML_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) throw new Error('Gemini nao retornou resposta.');
+
+    const cleanJson = jsonText.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+    const data = JSON.parse(cleanJson);
+    relatorioVisualHTML = buildRelatorioVisualHTML(data);
+
+    const blob = new Blob([relatorioVisualHTML], {type:'text/html'});
+    window.open(URL.createObjectURL(blob), '_blank');
+    showMsg('success','Relatorio visual gerado e aberto em nova aba!');
+  } catch(err) {
+    console.error(err);
+    showMsg('error', 'Erro ao gerar visual: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '\u{1F3A8} Gerar Relatorio Visual (HTML)';
+  }
+});
+
 // ===== HISTORICO =====
 function renderHistorico() {
   const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
@@ -445,4 +613,45 @@ new Chart(document.getElementById('c3'),{type:'bar',data:{labels:${pL},datasets:
 new Chart(document.getElementById('c4'),{type:'pie',data:{labels:${sL},datasets:[{data:${sD},backgroundColor:co.slice(0,${nS})}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
 <\/script></body></html>`;
 }
+
+function buildRelatorioVisualHTML(r) {
+  const pilares = r.distribuicaoEsforco?.pilares || [];
+  const pilarLabels = JSON.stringify(pilares.map(p => p.nome));
+  const pilarValues = JSON.stringify(pilares.map(p => p.percentual));
+  const pilarColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6'];
+  const periodo = r.periodo || '?';
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Resumo Gerencial - Cloud Management Services</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><\\/script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.6}.sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:#1e293b;color:#e2e8f0;padding:24px 0;overflow-y:auto;z-index:100}.sidebar-header{padding:0 20px 24px;border-bottom:1px solid #334155;margin-bottom:16px}.logo-box{width:48px;height:48px;background:#f26522;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:8px}.logo-box span{font-family:'Arial Black',Arial,sans-serif;font-size:9px;font-weight:900;color:white;line-height:1.2}.logo-text{font-size:.75rem;color:#94a3b8}.nav-links{list-style:none;padding:0}.nav-links li a{display:block;padding:10px 20px;color:#cbd5e1;text-decoration:none;font-size:.85rem;border-left:3px solid transparent;transition:all .2s}.nav-links li a:hover,.nav-links li a.active{background:#334155;color:#f8fafc;border-left-color:#f26522}.main-content{margin-left:260px;padding:32px 48px;max-width:1100px}.page-header{margin-bottom:32px;padding-bottom:16px;border-bottom:2px solid #e2e8f0}.page-header h1{font-size:1.6rem;color:#1e293b}.page-header .subtitle{font-size:.9rem;color:#64748b;margin-top:4px}.section{margin-bottom:48px;scroll-margin-top:24px}.section h2{font-size:1.25rem;color:#1e293b;margin-bottom:20px;padding-bottom:8px;border-bottom:1px solid #e2e8f0}.card{background:white;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:20px}.card h3{font-size:.95rem;color:#475569;margin-bottom:16px}.card p{color:#64748b;font-size:.9rem;margin-bottom:8px}.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}.kpi-card{background:white;border-radius:10px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}.kpi-value{font-size:2rem;font-weight:700;color:#1e293b}.kpi-label{font-size:.75rem;color:#64748b;margin-top:4px}.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.chart-card canvas{max-height:280px}.esforco-list{display:flex;flex-direction:column;gap:16px}.esforco-item{display:flex;align-items:flex-start;gap:12px}.esforco-dot{width:12px;height:12px;border-radius:50%;margin-top:6px;flex-shrink:0}.esforco-item strong{color:#1e293b;font-size:.9rem}.esforco-item p{margin:4px 0 0;font-size:.85rem}.items-list{display:flex;flex-direction:column;gap:20px}.item-entry{display:flex;gap:14px;align-items:flex-start}.item-icon{font-size:1.3rem;flex-shrink:0;margin-top:2px}.item-body strong{color:#1e293b;font-size:.9rem;display:block;margin-bottom:4px}.item-body p{font-size:.85rem;color:#64748b;margin:0}.table-wrapper{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #e2e8f0}th{background:#f8fafc;color:#475569;font-weight:600;font-size:.8rem;text-transform:uppercase}.badge{padding:4px 10px;border-radius:12px;font-size:.75rem;font-weight:600}.status-positivo{background:#dcfce7;color:#166534}.status-evolucao{background:#fef3c7;color:#92400e}.status-critico{background:#fecaca;color:#991b1b}.profissionais-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.prof-card{background:white;border-radius:10px;padding:20px;display:flex;gap:14px;align-items:flex-start;box-shadow:0 1px 3px rgba(0,0,0,.06)}.prof-avatar{width:44px;height:44px;border-radius:50%;background:#f26522;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0}.prof-info strong{color:#1e293b;font-size:.9rem;display:block;margin-bottom:4px}.prof-info p{font-size:.82rem;color:#64748b;margin:0}@media print{.sidebar{display:none}.main-content{margin-left:0;padding:16px}.card{box-shadow:none;border:1px solid #e2e8f0}}@media(max-width:768px){.sidebar{display:none}.main-content{margin-left:0;padding:16px}.charts-row{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}.profissionais-grid{grid-template-columns:1fr}}
+</style></head><body>
+<nav class="sidebar"><div class="sidebar-header"><div class="logo-box"><span>CLOUD</span><span>DOG</span></div><div class="logo-text">Management Services</div></div>
+<ul class="nav-links"><li><a href="#sumario">Sumario Executivo</a></li><li><a href="#esforco">Esforco Operacional</a></li><li><a href="#seguranca">Seguranca e Governanca</a></li><li><a href="#finops">FinOps / Custos</a></li><li><a href="#modernizacao">Modernizacao e Redes</a></li><li><a href="#observabilidade">Observabilidade e SRE</a></li><li><a href="#relacionamento">Relacionamento</a></li><li><a href="#profissionais">Profissionais</a></li></ul></nav>
+<main class="main-content">
+<header class="page-header"><h1>Resumo Gerencial - Cloud Management Services</h1><p class="subtitle">Periodo: ` + periodo + ` - Visao consolidada da operacao.</p></header>
+<section id="sumario" class="section"><h2>Sumario Executivo</h2>
+<div class="kpi-row">` + pilares.map((p,i) => '<div class="kpi-card" style="border-top:3px solid '+pilarColors[i]+'"><div class="kpi-value">'+p.percentual+'%</div><div class="kpi-label">'+p.nome+'</div></div>').join('') + `</div>
+<div class="card"><h3>Foco Estrategico</h3><p>` + (r.sumarioExecutivo?.texto||'') + `</p><p>` + (r.sumarioExecutivo?.focoEstrategico||'') + `</p></div></section>
+<section id="esforco" class="section"><h2>Distribuicao do Esforco Operacional</h2>
+<div class="charts-row"><div class="card chart-card"><h3>Distribuicao por Pilar (%)</h3><canvas id="chartPilares"></canvas></div><div class="card chart-card"><h3>Comparativo</h3><canvas id="chartComp"></canvas></div></div>
+<div class="card"><h3>Detalhamento</h3><div class="esforco-list">` + pilares.map((p,i) => '<div class="esforco-item"><div class="esforco-dot" style="background:'+pilarColors[i]+'"></div><div><strong>'+p.nome+' ('+p.percentual+'%)</strong><p>'+p.descricao+'</p></div></div>').join('') + `</div></div></section>
+<section id="seguranca" class="section"><h2>Seguranca e Governanca</h2><div class="card"><h3>Destaques por Cliente</h3><div class="items-list">` + (r.seguranca||[]).map(i => '<div class="item-entry"><div class="item-icon">\u{1F512}</div><div class="item-body"><strong>'+i.cliente+' - '+i.titulo+'</strong><p>'+i.descricao+'</p></div></div>').join('') + `</div></div></section>
+<section id="finops" class="section"><h2>Otimizacao de Custos (FinOps)</h2><div class="card"><h3>Destaques por Cliente</h3><div class="items-list">` + (r.finops||[]).map(i => '<div class="item-entry"><div class="item-icon">\u{1F4C9}</div><div class="item-body"><strong>'+i.cliente+' - '+i.titulo+'</strong><p>'+i.descricao+'</p></div></div>').join('') + `</div></div></section>
+<section id="modernizacao" class="section"><h2>Modernizacao e Redes</h2><div class="card"><h3>Destaques por Cliente</h3><div class="items-list">` + (r.modernizacao||[]).map(i => '<div class="item-entry"><div class="item-icon">\u{2601}</div><div class="item-body"><strong>'+i.cliente+' - '+i.titulo+'</strong><p>'+i.descricao+'</p></div></div>').join('') + `</div></div></section>
+<section id="observabilidade" class="section"><h2>Observabilidade, Performance e Resiliencia</h2><div class="card"><h3>Destaques por Cliente</h3><div class="items-list">` + (r.observabilidade||[]).map(i => '<div class="item-entry"><div class="item-icon">\u{1F4C8}</div><div class="item-body"><strong>'+i.cliente+' - '+i.titulo+'</strong><p>'+i.descricao+'</p></div></div>').join('') + `</div></div></section>
+<section id="relacionamento" class="section"><h2>Destaques Operacionais e Relacionamento</h2><div class="card"><h3>Status dos Clientes</h3><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Status</th><th>Destaque</th></tr></thead><tbody>` + (r.relacionamento||[]).map(i => {const sc=i.status==='Critico'||i.status==='Crítico'?'status-critico':i.status.includes('evolu')?'status-evolucao':'status-positivo';return '<tr><td><strong>'+i.cliente+'</strong></td><td><span class="badge '+sc+'">'+i.status+'</span></td><td>'+i.destaque+'</td></tr>';}).join('') + `</tbody></table></div></div></section>
+<section id="profissionais" class="section"><h2>Destaque dos Profissionais</h2><div class="profissionais-grid">` + (r.profissionais||[]).map(p => '<div class="prof-card"><div class="prof-avatar">'+(p.iniciais||p.nome.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase())+'</div><div class="prof-info"><strong>'+p.nome+'</strong><p>'+p.descricao+'</p></div></div>').join('') + `</div></section>
+</main>
+<script>
+const pc=['#3b82f6','#10b981','#f59e0b','#8b5cf6'];
+new Chart(document.getElementById('chartPilares'),{type:'doughnut',data:{labels:` + pilarLabels + `,datasets:[{data:` + pilarValues + `,backgroundColor:pc,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
+new Chart(document.getElementById('chartComp'),{type:'bar',data:{labels:` + pilarLabels + `,datasets:[{data:` + pilarValues + `,backgroundColor:pc,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'%'}}}}});
+const secs=document.querySelectorAll('.section');const navs=document.querySelectorAll('.nav-links a');
+window.addEventListener('scroll',()=>{let cur='';secs.forEach(s=>{if(window.scrollY>=s.offsetTop-120)cur=s.id;});navs.forEach(a=>{a.classList.remove('active');if(a.getAttribute('href')==='#'+cur)a.classList.add('active');});});
+<\\/script></body></html>`;
+}
+
+}; // fim de window.initApp
 </script>
