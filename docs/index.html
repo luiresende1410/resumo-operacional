@@ -117,7 +117,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       document.getElementById('headerRight').style.display = 'flex';
       document.getElementById('userPhoto').src = user.photoURL || '';
       document.getElementById('userName').textContent = user.displayName || user.email;
-      initApp();
+      // Aguarda o module estar carregado antes de iniciar o app
+      function tryInit() {
+        if (typeof window.initApp === 'function') {
+          window.initApp();
+        } else {
+          setTimeout(tryInit, 50);
+        }
+      }
+      tryInit();
     } else {
       if (user) auth.signOut(); // domínio inválido
       showLogin();
