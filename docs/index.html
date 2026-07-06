@@ -535,11 +535,22 @@ document.getElementById('btnGerarHTML').addEventListener('click', async () => {
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
 
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: userPrompt,
-      config: { systemInstruction: RELATORIO_HTML_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
-    });
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    let response = null;
+    for (const modelo of models) {
+      try {
+        btn.textContent = '\u23F3 Gerando visual com ' + modelo + '...';
+        response = await ai.models.generateContent({
+          model: modelo,
+          contents: userPrompt,
+          config: { systemInstruction: RELATORIO_HTML_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
+        });
+        if (response.text) break;
+      } catch (modelErr) {
+        console.warn('Modelo ' + modelo + ' falhou:', modelErr.message);
+        if (modelo === models[models.length - 1]) throw modelErr;
+      }
+    }
 
     const jsonText = response.text;
     if (!jsonText) throw new Error('Gemini nao retornou resposta.');
