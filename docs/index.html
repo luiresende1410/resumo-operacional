@@ -217,9 +217,14 @@ app.innerHTML = `
     <button type="button" id="btnCopiar">&#x1F4CB; Copiar Texto</button>
     <button type="button" id="btnBaixarPdf">&#x1F4C4; Exportar PDF</button>
     <button type="button" id="btnExportarHTML">&#x1F3A8; Exportar HTML</button>
+    <button type="button" id="btnSalvarRelatorio">&#x1F4BE; Salvar</button>
   </div>
   <div class="relatorio-html" id="relatorioHtml"></div>
 </div>
+<details class="config-box" id="historicoBox" style="margin-top:32px">
+  <summary>&#x1F4DA; Historico de Relatorios Salvos</summary>
+  <div id="historicoLista" style="margin-top:12px"></div>
+</details>
 `;
 
 // ===== CONFIG =====
@@ -494,6 +499,44 @@ function jsonToMarkdown(r) {
   for (const p of (r.profissionais || [])) { md += '- **' + p.nome + ':** ' + p.descricao + '\n'; }
   return md;
 }
+
+// ===== SALVAR E HISTORICO =====
+document.getElementById('btnSalvarRelatorio').addEventListener('click', () => {
+  if (!relatorioMd) return;
+  const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
+  const item = { id: Date.now(), data: new Date().toLocaleDateString('pt-BR'), titulo: 'Relatorio ' + new Date().toLocaleDateString('pt-BR'), md: relatorioMd, html: relatorioVisualHTML || null };
+  historico.unshift(item);
+  localStorage.setItem('historico_relatorios', JSON.stringify(historico));
+  showMsg('success','Relatorio salvo no historico!');
+  renderHistorico();
+});
+
+function renderHistorico() {
+  const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
+  const container = document.getElementById('historicoLista');
+  if (!container) return;
+  if (historico.length === 0) { container.innerHTML = '<p style="color:#888;font-size:.85rem">Nenhum relatorio salvo.</p>'; return; }
+  container.innerHTML = historico.map(item => '<div class="hist-item" data-id="'+item.id+'"><div class="info" onclick="window._carregarRel('+item.id+')"><div class="title">'+item.titulo+'</div><div class="date">'+item.data+'</div></div><div class="actions"><button onclick="window._carregarRel('+item.id+')">Abrir</button><button onclick="window._excluirRel('+item.id+')" class="del">Excluir</button></div></div>').join('');
+}
+window._carregarRel = function(id) {
+  const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
+  const item = historico.find(h => h.id === id);
+  if (!item) return;
+  relatorioMd = item.md;
+  relatorioVisualHTML = item.html || null;
+  document.getElementById('relatorioHtml').innerHTML = marked.parse(relatorioMd);
+  document.getElementById('resultado').classList.add('visible');
+  showMsg('success','Relatorio de ' + item.data + ' carregado.');
+};
+window._excluirRel = function(id) {
+  if (!confirm('Excluir este relatorio do historico?')) return;
+  let historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
+  historico = historico.filter(h => h.id !== id);
+  localStorage.setItem('historico_relatorios', JSON.stringify(historico));
+  renderHistorico();
+  showMsg('success','Relatorio excluido.');
+};
+renderHistorico();
 
 // ===== HELPERS =====
 function showMsg(type, text) { const m=document.getElementById('msg'); m.style.display='block'; m.className='msg '+type; m.textContent=text; }
