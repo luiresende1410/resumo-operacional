@@ -7,6 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompt-template.js';
 import { gerarDashboardHTML } from './dashboard-template.js';
+import { RELATORIO_HTML_SYSTEM_PROMPT, buildRelatorioUserPrompt, gerarRelatorioHTML } from './relatorio-html-template.js';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ program
   .option('--obs <texto>', 'Observações adicionais para incluir no relatório')
   .option('--output <pasta>', 'Pasta de saída', 'output')
   .option('--modelo <modelo>', 'Modelo do Gemini a usar', 'gemini-2.5-flash')
+  .option('--html', 'Gerar também o relatório HTML estilizado com navegação lateral')
   .parse();
 
 const opts = program.opts();
@@ -130,6 +132,37 @@ async function main() {
   writeFileSync(dashboardPath, dashboardHTML, 'utf-8');
   console.log(`📊 Dashboard salvo: ${dashboardPath}`);
 
+  // Gerar relatório HTML estilizado (se --html)
+  if (opts.html) {
+    console.log('🎨 Gerando relatório HTML estilizado...');
+
+    const responseHTML = await ai.models.generateContent({
+      model: opts.modelo,
+      contents: buildRelatorioUserPrompt(csvRaw, opts.obs),
+      config: {
+        systemInstruction: RELATORIO_HTML_SYSTEM_PROMPT,
+        temperature: 0.7,
+        maxOutputTokens: 65536,
+      },
+    });
+
+    const jsonText = responseHTML.text;
+    let relatorioData;
+
+    try {
+      const cleanJson = jsonText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      relatorioData = JSON.parse(cleanJson);
+    } catch (e) {
+      console.warn('⚠️  Não foi possível parsear JSON do relatório HTML, usando dados básicos');
+      relatorioData = buildFallbackData(records, metricas);
+    }
+
+    const relatorioHTMLContent = gerarRelatorioHTML(relatorioData, dataHoje);
+    const htmlPath = `${opts.output}/relatorio-${dataHoje}.html`;
+    writeFileSync(htmlPath, relatorioHTMLContent, 'utf-8');
+    console.log(`🎨 Relatório HTML salvo: ${htmlPath}`);
+  }
+
   console.log('\n🎉 Pronto! Abra o dashboard no navegador para visualizar.');
 }
 
@@ -181,6 +214,38 @@ function calcularMetricas(records) {
       'FinOps / Otimização de Custos': 15,
     },
     topClientes,
+  };
+}
+
+function buildFallbackData(records, metricas) {
+  const profissionais = [...new Set(records.map(r => r.Nome).filter(Boolean))].map(nome => ({
+    nome,
+    iniciais: nome.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase(),
+    descricao: 'Contribuição nas atividades operacionais do período.',
+  }));
+
+  const clientes = [...new Set(records.map(r => r.Cliente).filter(Boolean))];
+
+  return {
+    periodo: metricas.periodo,
+    sumarioExecutivo: {
+      texto: 'Relatório gerado automaticamente a partir dos dados do Jira.',
+      focoEstrategico: `Período com ${metricas.totalAtividades} atividades e ${metricas.totalHoras} horas registradas.`,
+    },
+    distribuicaoEsforco: {
+      pilares: Object.entries(metricas.distribuicaoEsforco).map(([nome, percentual]) => ({
+        nome, percentual, descricao: '',
+      })),
+    },
+    seguranca: [],
+    finops: [],
+    modernizacao: [],
+    observabilidade: [],
+    relacionamento: clientes.slice(0, 3).map(c => ({
+      cliente: c, status: 'Positivo', destaque: 'Atividades realizadas conforme planejado.',
+    })),
+    profissionais,
+    metricas,
   };
 }
 

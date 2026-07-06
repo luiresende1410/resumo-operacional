@@ -268,6 +268,7 @@
       </div>
 
       <button type="submit" class="btn-gerar" id="btnGerar">⚡ Gerar Relatório</button>
+      <button type="button" class="btn-gerar" id="btnGerarHTML" style="background: #2563eb; margin-top: 8px;">🎨 Gerar Relatório Visual (HTML)</button>
     </form>
 
     <div class="msg" id="msg"></div>
@@ -389,6 +390,47 @@
       a.click();
       document.body.removeChild(a);
     }
+
+    // Gerar relatório HTML estilizado
+    document.getElementById('btnGerarHTML').addEventListener('click', function() {
+      var fileInput = document.getElementById('csvFile');
+      if (!fileInput.files || !fileInput.files[0]) {
+        showMsg('error', '❌ Selecione um arquivo CSV antes de gerar.');
+        return;
+      }
+
+      var btn = document.getElementById('btnGerarHTML');
+      btn.disabled = true;
+      btn.textContent = '⏳ Gerando relatório visual... (pode levar até 1 minuto)';
+      hideMsg();
+
+      var formData = new FormData();
+      formData.append('csv', fileInput.files[0]);
+      formData.append('destaquesClientes', document.getElementById('destaquesClientes').value);
+      formData.append('destaquesProfissionais', document.getElementById('destaquesProfissionais').value);
+
+      fetch('/api/gerar-html', { method: 'POST', body: formData })
+        .then(function(response) {
+          return response.json().then(function(data) {
+            if (!response.ok) throw new Error(data.error || 'Erro HTTP ' + response.status);
+            return data;
+          });
+        })
+        .then(function(data) {
+          var blob = new Blob([data.relatorioHTML], { type: 'text/html' });
+          var url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          showMsg('success', '✅ Relatório visual gerado! Aberto em nova aba.');
+        })
+        .catch(function(err) {
+          console.error('Erro:', err);
+          showMsg('error', '❌ ' + err.message);
+        })
+        .finally(function() {
+          btn.disabled = false;
+          btn.textContent = '🎨 Gerar Relatório Visual (HTML)';
+        });
+    });
   </script>
 </body>
 </html>
