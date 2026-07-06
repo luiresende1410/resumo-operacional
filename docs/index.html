@@ -211,23 +211,15 @@ app.innerHTML = `
 <div class="field"><label>&#x1F3E2; Destaques de Clientes</label><textarea id="destaquesClientes" placeholder="Contextos relevantes sobre clientes (opcional)"></textarea></div>
 <div class="field"><label>&#x1F464; Destaques de Profissionais</label><textarea id="destaquesProfissionais" placeholder="Destaques sobre a equipe (opcional)"></textarea></div>
 <button type="button" id="btnGerar" class="btn-gerar">&#x26A1; Gerar Relatorio</button>
-<button type="button" id="btnGerarHTML" class="btn-gerar" style="background:#2563eb;margin-top:8px">&#x1F3A8; Gerar Relatorio Visual (HTML)</button>
 <div class="msg" id="msg"></div>
 <div class="resultado" id="resultado">
   <div class="resultado-actions">
     <button type="button" id="btnCopiar">&#x1F4CB; Copiar Texto</button>
-    <button type="button" id="btnBaixarMd">&#x1F4DD; Baixar .md</button>
     <button type="button" id="btnBaixarPdf">&#x1F4C4; Exportar PDF</button>
-    <button type="button" id="btnAbrirDash">&#x1F4CA; Abrir Dashboard</button>
-    <button type="button" id="btnAbrirVisual">&#x1F3A8; Abrir Visual</button>
-    <button type="button" id="btnSalvarRelatorio">&#x1F4BE; Salvar Relatorio</button>
+    <button type="button" id="btnExportarHTML">&#x1F3A8; Exportar HTML</button>
   </div>
   <div class="relatorio-html" id="relatorioHtml"></div>
 </div>
-<details class="config-box" id="historicoBox" style="margin-top:32px">
-  <summary>&#x1F4DA; Historico de Relatorios Salvos</summary>
-  <div id="historicoLista" style="margin-top:12px"></div>
-</details>
 `;
 
 // ===== CONFIG =====
@@ -383,47 +375,8 @@ async function chamarGeminiComRetry(ai, modelo, userPrompt, systemInstruction, b
   throw new Error('Limite da API Gemini atingido em todos os modelos. O limite gratuito reseta diariamente. Tente novamente mais tarde.');
 }
 
-// ===== SYSTEM PROMPT =====
-const SYSTEM_PROMPT = `Voce e um Especialista em Operacoes de Cloud e Lider de Engenharia de Confiabilidade (SRE). Sua tarefa e transformar uma lista de demandas e atividades tecnicas em um "Resumo Gerencial - Cloud Management Services" altamente profissional, consultivo e estruturado.
-
-O relatorio final deve seguir exatamente a estrutura abaixo, utilizando uma linguagem formal, proativa e focada no valor entregue ao cliente (mitigacao de risco, resiliencia, otimizacao de custos).
-
-### INSTRUCOES DE FORMATACAO E ESTILO:
-1. Agrupe as atividades brutas por contexto e cliente, em vez de apenas listar tarefas soltas.
-2. Traduza termos excessivamente tecnicos para impactos de negocio quando apropriado.
-3. Identifique proativamente falhas criticas ou vulnerabilidades mencionadas nas atividades e destaque-as.
-4. Mantenha os nomes dos clientes em CAIXA ALTA nos titulos das secoes.
-
-### ESTRUTURA DO DOCUMENTO A SER GERADA:
-
-1. Sumario Executivo
-(Um paragrafo de 3 a 4 linhas resumindo os esforcos estrategicos da semana. Foque nos pilares: Seguranca, Otimizacao de Custos, Modernizacao e Sustentacao).
-
-2. Distribuicao do Esforco Operacional
-- Seguranca e Governanca (X%): [Breve resumo]
-- Infraestrutura / DevOps (X%): [Breve resumo]
-- Sustentacao e Incidentes (X%): [Breve resumo]
-- FinOps / Otimizacao de Custos (X%): [Breve resumo]
-
-3. Destaques Estrategicos por Pilar
-A. Seguranca e Governanca (Destaque em: CLIENTE A, CLIENTE B...)
-B. Otimizacao de Custos (FinOps) (Destaque em: CLIENTE C...)
-C. Modernizacao e Redes (Destaque em: CLIENTE D...)
-D. Observabilidade, Performance e Resiliencia (Destaque em: CLIENTE E...)
-
-4. Destaques Operacionais e Relacionamento
-(2 a 3 clientes com movimentacoes mais criticas)
-
-5. Destaque dos Profissionais
-(Paragrafo de reconhecimento para cada profissional)
-
----
-Apos o relatorio, adicione "---METRICAS_JSON---" seguido de um JSON valido (sem crases):
-{"periodo":"DD/MM a DD/MM","totalAtividades":<n>,"totalHoras":<n>,"horasPorCliente":{},"horasPorProfissional":{},"atividadesPorStatus":{},"distribuicaoEsforco":{"Seguranca e Governanca":<n>,"Infraestrutura / DevOps":<n>,"Sustentacao e Incidentes":<n>,"FinOps / Otimizacao de Custos":<n>},"topClientes":[]}`;
-
 // ===== GERAR RELATORIO =====
 let relatorioMd = null;
-let dashboardHTMLResult = null;
 let relatorioVisualHTML = null;
 
 document.getElementById('btnGerar').addEventListener('click', async () => {
@@ -452,109 +405,6 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     if (destClientes.trim()) obs += 'Destaques de Clientes:\n' + destClientes + '\n\n';
     if (destProf.trim()) obs += 'Destaques de Profissionais:\n' + destProf + '\n\n';
 
-    let userPrompt = 'Lista de atividades da semana (CSV: Data,Cliente,Resumo,Nome,Comentario,Link,Status,Horas):\n\n' + csvRaw;
-    if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
-    userPrompt += '\n\nGere o relatorio completo com o bloco ---METRICAS_JSON--- ao final.';
-
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await chamarGeminiComRetry(ai, 'gemini-2.5-flash', userPrompt, SYSTEM_PROMPT, btn);
-
-    const textoCompleto = response.text;
-    if (!textoCompleto) throw new Error('Gemini nao retornou resposta.');
-
-    // Separate report from metrics
-    const sep = '---METRICAS_JSON---';
-    let metricas;
-    if (textoCompleto.includes(sep)) {
-      const partes = textoCompleto.split(sep);
-      relatorioMd = partes[0].trim();
-      let jsonStr = partes[1].trim().replace(/```json?\n?/g,'').replace(/```/g,'').trim();
-      try { metricas = JSON.parse(jsonStr); } catch(e) { metricas = calcMetricas(csvRaw); }
-    } else {
-      relatorioMd = textoCompleto.trim();
-      metricas = calcMetricas(csvRaw);
-    }
-
-    // Render markdown as HTML
-    document.getElementById('relatorioHtml').innerHTML = marked.parse(relatorioMd);
-    dashboardHTMLResult = gerarDash(metricas);
-    document.getElementById('resultado').classList.add('visible');
-    showMsg('success', 'Relatorio gerado! ' + (metricas.totalAtividades || '?') + ' atividades processadas.');
-  } catch(err) {
-    console.error(err);
-    showMsg('error', err.message);
-  } finally {
-    btn.disabled = false; btn.textContent = '\u26A1 Gerar Relatorio';
-  }
-});
-
-// ===== ACTIONS =====
-document.getElementById('btnCopiar').addEventListener('click', () => {
-  if (relatorioMd) navigator.clipboard.writeText(relatorioMd).then(() => showMsg('success','Copiado!'));
-});
-document.getElementById('btnBaixarMd').addEventListener('click', () => {
-  if (relatorioMd) { const d=new Date().toISOString().split('T')[0]; dl(relatorioMd,'relatorio-'+d+'.md','text/markdown'); }
-});
-document.getElementById('btnAbrirDash').addEventListener('click', () => {
-  if (dashboardHTMLResult) { const b=new Blob([dashboardHTMLResult],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
-});
-document.getElementById('btnBaixarPdf').addEventListener('click', () => {
-  if (!relatorioMd) return;
-  const html = marked.parse(relatorioMd);
-  const pdfPage = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatorio Semanal</title><style>body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;max-width:800px;margin:0 auto;color:#1a1a2e;font-size:14px;line-height:1.8}h1,h2,h3{color:#f26522;margin:20px 0 8px}h1{font-size:1.4rem}h2{font-size:1.2rem}h3{font-size:1rem}ul,ol{padding-left:24px}li{margin:4px 0}strong{color:#1a1a2e}p{margin:8px 0}@media print{body{padding:20px}}</style></head><body>${html}<` + `script>window.onload=function(){window.print()}<` + `/script></body></html>`;
-  const blob = new Blob([pdfPage], {type:'text/html'});
-  window.open(URL.createObjectURL(blob), '_blank');
-});
-document.getElementById('btnSalvarRelatorio').addEventListener('click', () => {
-  if (!relatorioMd) return;
-  const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
-  const item = { id: Date.now(), data: new Date().toLocaleDateString('pt-BR'), titulo: 'Relatorio ' + new Date().toLocaleDateString('pt-BR'), md: relatorioMd, dashboard: dashboardHTMLResult || null };
-  historico.unshift(item);
-  localStorage.setItem('historico_relatorios', JSON.stringify(historico));
-  showMsg('success','Relatorio salvo no historico!');
-  renderHistorico();
-});
-
-// ===== RELATORIO VISUAL HTML =====
-document.getElementById('btnAbrirVisual').addEventListener('click', () => {
-  if (relatorioVisualHTML) { const b=new Blob([relatorioVisualHTML],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
-  else { showMsg('error','Gere o relatorio visual primeiro (botao azul).'); }
-});
-
-const RELATORIO_HTML_PROMPT = `Voce e um Especialista em Operacoes de Cloud e Lider de SRE. Transforme atividades tecnicas em um JSON estruturado para relatorio gerencial.
-
-IMPORTANTE: Responda APENAS com JSON valido. Sem markdown, sem crases, sem texto adicional.
-
-Estrutura:
-{"periodo":"DD/MM a DD/MM","sumarioExecutivo":{"texto":"Paragrafo resumo...","focoEstrategico":"Paragrafo expandido..."},"distribuicaoEsforco":{"pilares":[{"nome":"Seguranca e Governanca","percentual":0,"descricao":"..."},{"nome":"Infraestrutura / DevOps","percentual":0,"descricao":"..."},{"nome":"Sustentacao e Incidentes","percentual":0,"descricao":"..."},{"nome":"FinOps / Otimizacao de Custos","percentual":0,"descricao":"..."}]},"seguranca":[{"cliente":"NOME","titulo":"Titulo","descricao":"Descricao impacto"}],"finops":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"modernizacao":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"observabilidade":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"relacionamento":[{"cliente":"NOME","status":"Positivo|Em evolucao|Critico","destaque":"..."}],"profissionais":[{"nome":"Nome Completo","iniciais":"NC","descricao":"Reconhecimento..."}],"metricas":{"totalAtividades":0,"totalHoras":0,"horasPorCliente":{},"horasPorProfissional":{},"atividadesPorStatus":{},"topClientes":[]}}
-
-Regras: Percentuais somam 100%. 3-7 itens por pilar. 2-4 em relacionamento. Um por profissional. Clientes em CAIXA ALTA. Traduza termos tecnicos para impactos de negocio.`;
-
-document.getElementById('btnGerarHTML').addEventListener('click', async () => {
-  const apiKey = document.getElementById('geminiKey').value.trim() || localStorage.getItem('geminiKey') || '';
-  if (!apiKey) { showMsg('error','Informe a API Key do Gemini nas configuracoes.'); document.getElementById('cfgBox').setAttribute('open',''); return; }
-
-  let csvRaw = '';
-  if (activeSource === 'csv') {
-    const fileInput = document.getElementById('csvFile');
-    if (!fileInput.files || !fileInput.files[0]) { showMsg('error','Selecione um arquivo CSV.'); return; }
-    csvRaw = await fileInput.files[0].text();
-  } else {
-    if (!jiraCsvData) { showMsg('error','Busque as issues do Jira primeiro.'); return; }
-    csvRaw = jiraCsvData;
-  }
-
-  const btn = document.getElementById('btnGerarHTML');
-  btn.disabled = true; btn.textContent = '\u23F3 Gerando relatorio visual...';
-  hideMsg();
-
-  try {
-    const destClientes = document.getElementById('destaquesClientes').value;
-    const destProf = document.getElementById('destaquesProfissionais').value;
-    let obs = '';
-    if (destClientes.trim()) obs += 'Destaques de Clientes:\n' + destClientes + '\n\n';
-    if (destProf.trim()) obs += 'Destaques de Profissionais:\n' + destProf + '\n\n';
-
     let userPrompt = 'Lista de atividades (CSV):\n\n' + csvRaw;
     if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
@@ -566,82 +416,88 @@ document.getElementById('btnGerarHTML').addEventListener('click', async () => {
     if (!jsonText) throw new Error('Gemini nao retornou resposta.');
 
     const cleanJson = jsonText.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
-    const data = JSON.parse(cleanJson);
-    relatorioVisualHTML = buildRelatorioVisualHTML(data);
+    const relatorioData = JSON.parse(cleanJson);
 
-    const blob = new Blob([relatorioVisualHTML], {type:'text/html'});
-    window.open(URL.createObjectURL(blob), '_blank');
-    showMsg('success','Relatorio visual gerado e aberto em nova aba!');
+    // Gerar texto markdown a partir do JSON estruturado
+    relatorioMd = jsonToMarkdown(relatorioData);
+    // Gerar HTML visual
+    relatorioVisualHTML = buildRelatorioVisualHTML(relatorioData);
+
+    // Renderizar preview
+    document.getElementById('relatorioHtml').innerHTML = marked.parse(relatorioMd);
+    document.getElementById('resultado').classList.add('visible');
+    showMsg('success', 'Relatorio gerado! ' + (relatorioData.metricas?.totalAtividades || '?') + ' atividades processadas.');
   } catch(err) {
     console.error(err);
-    showMsg('error', 'Erro ao gerar visual: ' + err.message);
+    showMsg('error', err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '\u{1F3A8} Gerar Relatorio Visual (HTML)';
+    btn.disabled = false; btn.textContent = '\u26A1 Gerar Relatorio';
   }
 });
 
-// ===== HISTORICO =====
-function renderHistorico() {
-  const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
-  const container = document.getElementById('historicoLista');
-  if (historico.length === 0) { container.innerHTML = '<p style="color:#888;font-size:.85rem">Nenhum relatorio salvo.</p>'; return; }
-  container.innerHTML = historico.map(item => `<div class="hist-item" data-id="${item.id}"><div class="info"><div class="title">${item.titulo}</div><div class="date">${item.data}</div></div><div class="actions"><button onclick="window._carregarRel(${item.id})">Abrir</button><button onclick="window._excluirRel(${item.id})" class="del">Excluir</button></div></div>`).join('');
+// ===== ACTIONS =====
+document.getElementById('btnCopiar').addEventListener('click', () => {
+  if (relatorioMd) navigator.clipboard.writeText(relatorioMd).then(() => showMsg('success','Copiado para a area de transferencia!'));
+});
+
+document.getElementById('btnBaixarPdf').addEventListener('click', () => {
+  if (!relatorioMd) return;
+  const html = marked.parse(relatorioMd);
+  const pdfPage = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatorio Semanal</title><style>body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;max-width:800px;margin:0 auto;color:#1a1a2e;font-size:14px;line-height:1.8}h1,h2,h3{color:#f26522;margin:20px 0 8px}h1{font-size:1.4rem}h2{font-size:1.2rem}h3{font-size:1rem}ul,ol{padding-left:24px}li{margin:4px 0}strong{color:#1a1a2e}p{margin:8px 0}@media print{body{padding:20px}}</style></head><body>` + html + `<` + `script>window.onload=function(){window.print()}<` + `/script></body></html>`;
+  const blob = new Blob([pdfPage], {type:'text/html'});
+  window.open(URL.createObjectURL(blob), '_blank');
+});
+
+document.getElementById('btnExportarHTML').addEventListener('click', () => {
+  if (!relatorioVisualHTML) { showMsg('error','Gere o relatorio primeiro.'); return; }
+  const blob = new Blob([relatorioVisualHTML], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'relatorio-' + new Date().toISOString().split('T')[0] + '.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showMsg('success','HTML exportado!');
+});
+
+// ===== PROMPT JSON ESTRUTURADO =====
+const RELATORIO_HTML_PROMPT = `Voce e um Especialista em Operacoes de Cloud e Lider de SRE. Transforme atividades tecnicas em um JSON estruturado para relatorio gerencial.
+
+IMPORTANTE: Responda APENAS com JSON valido. Sem markdown, sem crases, sem texto adicional.
+
+Estrutura:
+{"periodo":"DD/MM a DD/MM","sumarioExecutivo":{"texto":"Paragrafo resumo...","focoEstrategico":"Paragrafo expandido..."},"distribuicaoEsforco":{"pilares":[{"nome":"Seguranca e Governanca","percentual":0,"descricao":"..."},{"nome":"Infraestrutura / DevOps","percentual":0,"descricao":"..."},{"nome":"Sustentacao e Incidentes","percentual":0,"descricao":"..."},{"nome":"FinOps / Otimizacao de Custos","percentual":0,"descricao":"..."}]},"seguranca":[{"cliente":"NOME","titulo":"Titulo","descricao":"Descricao impacto"}],"finops":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"modernizacao":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"observabilidade":[{"cliente":"NOME","titulo":"Titulo","descricao":"..."}],"relacionamento":[{"cliente":"NOME","status":"Positivo|Em evolucao|Critico","destaque":"..."}],"profissionais":[{"nome":"Nome Completo","iniciais":"NC","descricao":"Reconhecimento..."}],"metricas":{"totalAtividades":0,"totalHoras":0,"horasPorCliente":{},"horasPorProfissional":{},"atividadesPorStatus":{},"topClientes":[]}}
+
+Regras: Percentuais somam 100%. 3-7 itens por pilar. 2-4 em relacionamento. Um por profissional. Clientes em CAIXA ALTA. Traduza termos tecnicos para impactos de negocio.`;
+
+// Converte o JSON estruturado em texto Markdown para copiar/PDF
+function jsonToMarkdown(r) {
+  let md = '# Resumo Gerencial - Cloud Management Services\n\n';
+  md += '**Periodo:** ' + (r.periodo || '?') + '\n\n';
+  md += '## 1. Sumario Executivo\n\n';
+  md += (r.sumarioExecutivo?.texto || '') + '\n\n';
+  md += (r.sumarioExecutivo?.focoEstrategico || '') + '\n\n';
+  md += '## 2. Distribuicao do Esforco Operacional\n\n';
+  for (const p of (r.distribuicaoEsforco?.pilares || [])) {
+    md += '- **' + p.nome + ' (' + p.percentual + '%):** ' + p.descricao + '\n';
+  }
+  md += '\n## 3. Destaques Estrategicos por Pilar\n\n';
+  md += '### A. Seguranca e Governanca\n\n';
+  for (const i of (r.seguranca || [])) { md += '- **' + i.cliente + ' — ' + i.titulo + ':** ' + i.descricao + '\n'; }
+  md += '\n### B. Otimizacao de Custos (FinOps)\n\n';
+  for (const i of (r.finops || [])) { md += '- **' + i.cliente + ' — ' + i.titulo + ':** ' + i.descricao + '\n'; }
+  md += '\n### C. Modernizacao e Redes\n\n';
+  for (const i of (r.modernizacao || [])) { md += '- **' + i.cliente + ' — ' + i.titulo + ':** ' + i.descricao + '\n'; }
+  md += '\n### D. Observabilidade, Performance e Resiliencia\n\n';
+  for (const i of (r.observabilidade || [])) { md += '- **' + i.cliente + ' — ' + i.titulo + ':** ' + i.descricao + '\n'; }
+  md += '\n## 4. Destaques Operacionais e Relacionamento\n\n';
+  for (const i of (r.relacionamento || [])) { md += '- **' + i.cliente + '** (' + i.status + '): ' + i.destaque + '\n'; }
+  md += '\n## 5. Destaque dos Profissionais\n\n';
+  for (const p of (r.profissionais || [])) { md += '- **' + p.nome + ':** ' + p.descricao + '\n'; }
+  return md;
 }
-window._carregarRel = function(id) {
-  const historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
-  const item = historico.find(h => h.id === id);
-  if (!item) return;
-  relatorioMd = item.md;
-  dashboardHTMLResult = item.dashboard;
-  document.getElementById('relatorioHtml').innerHTML = marked.parse(relatorioMd);
-  document.getElementById('resultado').classList.add('visible');
-  showMsg('success','Relatorio de ' + item.data + ' carregado.');
-};
-window._excluirRel = function(id) {
-  if (!confirm('Excluir este relatorio do historico?')) return;
-  let historico = JSON.parse(localStorage.getItem('historico_relatorios') || '[]');
-  historico = historico.filter(h => h.id !== id);
-  localStorage.setItem('historico_relatorios', JSON.stringify(historico));
-  renderHistorico();
-  showMsg('success','Relatorio excluido.');
-};
-renderHistorico();
 
 // ===== HELPERS =====
 function showMsg(type, text) { const m=document.getElementById('msg'); m.style.display='block'; m.className='msg '+type; m.textContent=text; }
 function hideMsg() { const m=document.getElementById('msg'); m.style.display='none'; m.className='msg'; }
-function dl(content, name, type) { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
-
-function calcMetricas(csv) {
-  const lines=csv.trim().split('\n'); if(lines.length<2) return {periodo:'?',totalAtividades:0,totalHoras:0,horasPorCliente:{},horasPorProfissional:{},atividadesPorStatus:{},distribuicaoEsforco:{},topClientes:[]};
-  const hpc={},hpp={},aps={};const datas=[]; let th=0;
-  for(let i=1;i<lines.length;i++){const c=lines[i].split(',');if(c.length<8)continue;const cl=c[1]||'?',nm=c[3]||'?',st=c[6]||'?',h=parseFloat(c[7])||0;if(c[0])datas.push(c[0]);th+=h;hpc[cl]=(hpc[cl]||0)+h;hpp[nm]=(hpp[nm]||0)+h;aps[st]=(aps[st]||0)+1;}
-  datas.sort();
-  return {periodo:datas.length?datas[0]+' a '+datas[datas.length-1]:'?',totalAtividades:lines.length-1,totalHoras:Math.round(th*10)/10,horasPorCliente:hpc,horasPorProfissional:hpp,atividadesPorStatus:aps,distribuicaoEsforco:{'Seguranca e Governanca':25,'Infraestrutura / DevOps':30,'Sustentacao e Incidentes':30,'FinOps / Otimizacao de Custos':15},topClientes:Object.entries(hpc).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>e[0])};
-}
-
-function gerarDash(m) {
-  const {periodo,totalAtividades,totalHoras,horasPorCliente,horasPorProfissional,atividadesPorStatus,distribuicaoEsforco,topClientes}=m;
-  const cL=JSON.stringify(Object.keys(horasPorCliente||{})),cD=JSON.stringify(Object.values(horasPorCliente||{}));
-  const pL=JSON.stringify(Object.keys(horasPorProfissional||{})),pD=JSON.stringify(Object.values(horasPorProfissional||{}));
-  const sL=JSON.stringify(Object.keys(atividadesPorStatus||{})),sD=JSON.stringify(Object.values(atividadesPorStatus||{}));
-  const eL=JSON.stringify(Object.keys(distribuicaoEsforco||{})),eD=JSON.stringify(Object.values(distribuicaoEsforco||{}));
-  const nC=Object.keys(horasPorCliente||{}).length,nP=Object.keys(horasPorProfissional||{}).length,nS=Object.keys(atividadesPorStatus||{}).length;
-  const d=new Date().toISOString().split('T')[0];
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Dashboard - Cloud Management</title>
-<` + `script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><` + `/script>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a1a2e;padding:24px}.header{text-align:center;margin-bottom:32px}.header h1{font-size:1.6rem;margin-bottom:4px}.header p{color:#6b7280;font-size:.9rem}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:32px}.kpi{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}.kpi .v{font-size:2rem;font-weight:700;color:#2563eb}.kpi .l{font-size:.8rem;color:#6b7280;margin-top:4px}.kpi.g .v{color:#059669}.kpi.p .v{color:#7c3aed}.kpi.o .v{color:#d97706}.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:24px;margin-bottom:32px}.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08)}.card h3{font-size:.95rem;color:#374151;margin-bottom:16px}.top{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:24px}.top h3{margin-bottom:12px}.top ol{padding-left:20px}.top li{padding:4px 0;font-size:.9rem}@media(max-width:768px){.charts{grid-template-columns:1fr}}</style></head><body>
-<div class="header"><h1>Dashboard Semanal - Cloud Management Services</h1><p>Periodo: ${periodo||'?'} | Gerado: ${d}</p></div>
-<div class="kpis"><div class="kpi"><div class="v">${totalAtividades||0}</div><div class="l">Atividades</div></div><div class="kpi g"><div class="v">${totalHoras||0}h</div><div class="l">Horas</div></div><div class="kpi p"><div class="v">${nC}</div><div class="l">Clientes</div></div><div class="kpi o"><div class="v">${nP}</div><div class="l">Profissionais</div></div></div>
-<div class="charts"><div class="card"><h3>Horas por Cliente</h3><canvas id="c1"></canvas></div><div class="card"><h3>Distribuicao por Pilar</h3><canvas id="c2"></canvas></div><div class="card"><h3>Horas por Profissional</h3><canvas id="c3"></canvas></div><div class="card"><h3>Atividades por Status</h3><canvas id="c4"></canvas></div></div>
-<div class="top"><h3>Top Clientes</h3><ol>${(topClientes||[]).map(c=>'<li><strong>'+c+'</strong></li>').join('')}</ol></div>
-<` + `script>const co=['#2563eb','#059669','#7c3aed','#d97706','#dc2626','#0891b2','#4f46e5','#ca8a04','#16a34a','#9333ea','#e11d48','#0d9488','#6366f1','#ea580c','#84cc16'];
-new Chart(document.getElementById('c1'),{type:'bar',data:{labels:${cL},datasets:[{data:${cD},backgroundColor:co.slice(0,${nC}),borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Horas'}}}}});
-new Chart(document.getElementById('c2'),{type:'doughnut',data:{labels:${eL},datasets:[{data:${eD},backgroundColor:['#2563eb','#059669','#d97706','#7c3aed']}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
-new Chart(document.getElementById('c3'),{type:'bar',data:{labels:${pL},datasets:[{data:${pD},backgroundColor:co.slice(0,${nP}),borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'Horas'}}}}});
-new Chart(document.getElementById('c4'),{type:'pie',data:{labels:${sL},datasets:[{data:${sD},backgroundColor:co.slice(0,${nS})}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
-<` + `/script></body></html>`;
-}
 
 function buildRelatorioVisualHTML(r) {
   const pilares = r.distribuicaoEsforco?.pilares || [];
