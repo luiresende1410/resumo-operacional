@@ -343,6 +343,46 @@ document.getElementById('btnBuscarJira').addEventListener('click', async () => {
   }
 });
 
+// ===== HELPER: chamada Gemini com retry automático =====
+async function chamarGeminiComRetry(ai, modelo, userPrompt, systemInstruction, btnEl, maxRetries = 3) {
+  const models = [modelo, 'gemini-2.0-flash', 'gemini-2.5-flash'];
+  const uniqueModels = [...new Set(models)];
+  
+  for (const m of uniqueModels) {
+    for (let tentativa = 1; tentativa <= maxRetries; tentativa++) {
+      try {
+        if (btnEl) btnEl.textContent = '\u23F3 ' + m + ' (tentativa ' + tentativa + ')...';
+        const response = await ai.models.generateContent({
+          model: m,
+          contents: userPrompt,
+          config: { systemInstruction, temperature: 0.7, maxOutputTokens: 65536 },
+        });
+        if (response.text) return response;
+      } catch (err) {
+        const code = err?.error?.code || err?.status || 0;
+        const isRateLimit = code === 429 || code === 503 || (err.message && err.message.includes('RESOURCE_EXHAUSTED'));
+        
+        if (isRateLimit && tentativa < maxRetries) {
+          const espera = tentativa * 30; // 30s, 60s, 90s
+          if (btnEl) btnEl.textContent = '\u23F3 Limite atingido, aguardando ' + espera + 's...';
+          await new Promise(r => setTimeout(r, espera * 1000));
+          continue;
+        }
+        
+        if (isRateLimit && tentativa === maxRetries) {
+          // Tenta próximo modelo
+          break;
+        }
+        
+        // Erro não-retry (ex: 400, 500)
+        throw err;
+      }
+    }
+  }
+  
+  throw new Error('Limite da API Gemini atingido em todos os modelos. O limite gratuito reseta diariamente. Tente novamente mais tarde.');
+}
+
 // ===== SYSTEM PROMPT =====
 const SYSTEM_PROMPT = `Voce e um Especialista em Operacoes de Cloud e Lider de Engenharia de Confiabilidade (SRE). Sua tarefa e transformar uma lista de demandas e atividades tecnicas em um "Resumo Gerencial - Cloud Management Services" altamente profissional, consultivo e estruturado.
 
@@ -417,22 +457,7 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     userPrompt += '\n\nGere o relatorio completo com o bloco ---METRICAS_JSON--- ao final.';
 
     const ai = new GoogleGenAI({ apiKey });
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-    let response = null;
-    for (const modelo of models) {
-      try {
-        btn.textContent = '\u23F3 Gerando com ' + modelo + '...';
-        response = await ai.models.generateContent({
-          model: modelo,
-          contents: userPrompt,
-          config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
-        });
-        if (response.text) break;
-      } catch (modelErr) {
-        console.warn('Modelo ' + modelo + ' falhou:', modelErr.message);
-        if (modelo === models[models.length - 1]) throw modelErr;
-      }
-    }
+    const response = await chamarGeminiComRetry(ai, 'gemini-2.5-flash', userPrompt, SYSTEM_PROMPT, btn);
 
     const textoCompleto = response.text;
     if (!textoCompleto) throw new Error('Gemini nao retornou resposta.');
@@ -535,22 +560,7 @@ document.getElementById('btnGerarHTML').addEventListener('click', async () => {
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
 
     const ai = new GoogleGenAI({ apiKey });
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-    let response = null;
-    for (const modelo of models) {
-      try {
-        btn.textContent = '\u23F3 Gerando visual com ' + modelo + '...';
-        response = await ai.models.generateContent({
-          model: modelo,
-          contents: userPrompt,
-          config: { systemInstruction: RELATORIO_HTML_PROMPT, temperature: 0.7, maxOutputTokens: 65536 },
-        });
-        if (response.text) break;
-      } catch (modelErr) {
-        console.warn('Modelo ' + modelo + ' falhou:', modelErr.message);
-        if (modelo === models[models.length - 1]) throw modelErr;
-      }
-    }
+    const response = await chamarGeminiComRetry(ai, 'gemini-2.5-flash', userPrompt, RELATORIO_HTML_PROMPT, btn);
 
     const jsonText = response.text;
     if (!jsonText) throw new Error('Gemini nao retornou resposta.');
