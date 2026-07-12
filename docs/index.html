@@ -471,33 +471,54 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
 
-    const response = await chamarIA(userPrompt, RELATORIO_HTML_PROMPT, btn);
-
-    const jsonText = response.text;
-    if (!jsonText) throw new Error('Gemini nao retornou resposta.');
-
-    const cleanJson = jsonText.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
-    let relatorioData;
-    try {
-      relatorioData = JSON.parse(cleanJson);
-    } catch(parseErr) {
-      // Tenta recuperar JSON truncado fechando chaves/colchetes
-      let fixed = cleanJson;
-      // Remove última propriedade incompleta (string não fechada)
-      fixed = fixed.replace(/,"[^"]*"?:?"?[^"{}[\]]*$/, '');
-      fixed = fixed.replace(/,\s*"[^"]*$/, '');
-      // Fecha colchetes e chaves abertas
-      const opens = (fixed.match(/[{[]/g) || []).length;
-      const closes = (fixed.match(/[}\]]/g) || []).length;
-      for (let i = 0; i < opens - closes; i++) {
-        const lastOpen = fixed.lastIndexOf('{') > fixed.lastIndexOf('[') ? '}' : ']';
-        fixed += lastOpen;
-      }
+    let relatorioData = null;
+    const provedor = document.getElementById('provedor').value || localStorage.getItem('provedor') || 'gemini';
+    
+    // Tenta provedor principal, se falhar tenta o outro
+    const tentativas = [provedor, provedor === 'gemini' ? 'groq' : 'gemini'];
+    
+    for (const prov of tentativas) {
       try {
-        relatorioData = JSON.parse(fixed);
-        showMsg('info','Resposta parcial do Gemini recuperada. Alguns dados podem estar incompletos.');
-      } catch(e2) {
-        throw new Error('Gemini retornou resposta incompleta. Tente novamente com um CSV menor ou aguarde o reset do limite.');
+        if (prov === 'groq') {
+          const groqKey = document.getElementById('groqKey').value.trim() || localStorage.getItem('groqKey') || '';
+          if (!groqKey) { if (prov !== provedor) continue; throw new Error('Groq API Key nao configurada.'); }
+        }
+        if (prov === 'gemini') {
+          const gemKey = document.getElementById('geminiKey').value.trim() || localStorage.getItem('geminiKey') || '';
+          if (!gemKey) { if (prov !== provedor) continue; throw new Error('Gemini API Key nao configurada.'); }
+        }
+        
+        if (btn) btn.textContent = '\u23F3 Gerando via ' + prov + '...';
+        const response = prov === 'groq' 
+          ? await chamarGroq(userPrompt, RELATORIO_HTML_PROMPT, btn)
+          : await chamarGemini(userPrompt, RELATORIO_HTML_PROMPT, btn);
+
+        const jsonText = response.text;
+        if (!jsonText) throw new Error('Sem resposta.');
+
+        const cleanJson = jsonText.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+        try {
+          relatorioData = JSON.parse(cleanJson);
+        } catch(parseErr) {
+          // Tenta recuperar JSON truncado
+          let fixed = cleanJson;
+          fixed = fixed.replace(/,"[^"]*"?:?"?[^"{}[\]]*$/, '');
+          fixed = fixed.replace(/,\s*"[^"]*$/, '');
+          const opens = (fixed.match(/[{[]/g) || []).length;
+          const closes = (fixed.match(/[}\]]/g) || []).length;
+          for (let i = 0; i < opens - closes; i++) {
+            fixed += fixed.lastIndexOf('{') > fixed.lastIndexOf('[') ? '}' : ']';
+          }
+          relatorioData = JSON.parse(fixed); // se falhar, cai no catch externo
+          showMsg('info','Resposta parcial recuperada via ' + prov + '.');
+        }
+        
+        if (relatorioData) break; // sucesso
+      } catch(provErr) {
+        console.warn(prov + ' falhou:', provErr.message);
+        if (prov === tentativas[tentativas.length - 1]) throw provErr; // ultimo, propaga erro
+        if (btn) btn.textContent = '\u23F3 ' + prov + ' falhou, tentando alternativa...';
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
