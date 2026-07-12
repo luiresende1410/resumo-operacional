@@ -189,7 +189,9 @@ app.innerHTML = `
 <details class="config-box" id="cfgBox">
   <summary>&#x1F511; Configuracoes (API Keys e Jira)</summary>
   <div class="inner">
+    <div class="field"><label>Provedor de IA</label><select id="provedor" style="width:100%;background:#2d2d2d;border:1px solid #555;border-radius:6px;color:#e0e0e0;padding:12px;font-size:.9rem"><option value="gemini">Google Gemini (gratuito)</option><option value="groq">Groq (gratuito, output maior)</option></select></div>
     <div class="field"><label>Gemini API Key</label><input type="password" id="geminiKey" placeholder="Cole sua key aqui"><p class="hint">Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></p></div>
+    <div class="field"><label>Groq API Key</label><input type="password" id="groqKey" placeholder="Cole sua key do Groq aqui"><p class="hint">Obtenha em <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a> (gratuito)</p></div>
     <div class="field"><label>Email Jira (para integracao)</label><input type="email" id="jiraEmail" placeholder="seu.email@empresa.com"></div>
     <div class="field"><label>Jira API Token</label><input type="password" id="jiraToken" placeholder="Token gerado em id.atlassian.com"><p class="hint">Gere em <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">id.atlassian.com</a></p></div>
     <div class="field"><label>Dominio Jira</label><input type="text" id="jiraDomain" value="clouddog.atlassian.net" placeholder="empresa.atlassian.net"></div>
@@ -229,7 +231,7 @@ app.innerHTML = `
 `;
 
 // ===== CONFIG =====
-const fields = ['geminiKey','jiraEmail','jiraToken','jiraDomain','proxyUrl'];
+const fields = ['geminiKey','groqKey','provedor','jiraEmail','jiraToken','jiraDomain','proxyUrl'];
 fields.forEach(id => {
   const el = document.getElementById(id);
   const saved = localStorage.getItem(id);
@@ -341,12 +343,76 @@ document.getElementById('btnBuscarJira').addEventListener('click', async () => {
   }
 });
 
-// ===== HELPER: chamada Gemini com retry automático =====
-async function chamarGeminiComRetry(ai, modelo, userPrompt, systemInstruction, btnEl, maxRetries = 3) {
-  const models = [modelo, 'gemini-2.0-flash', 'gemini-2.5-flash'];
-  const uniqueModels = [...new Set(models)];
+// ===== HELPER: chamada IA com retry (Gemini ou Groq) =====
+async function chamarIA(userPrompt, systemInstruction, btnEl) {
+  const provedor = document.getElementById('provedor').value || localStorage.getItem('provedor') || 'gemini';
   
-  for (const m of uniqueModels) {
+  if (provedor === 'groq') {
+    return chamarGroq(userPrompt, systemInstruction, btnEl);
+  }
+  return chamarGemini(userPrompt, systemInstruction, btnEl);
+}
+
+async function chamarGroq(userPrompt, systemInstruction, btnEl, maxRetries = 3) {
+  const apiKey = document.getElementById('groqKey').value.trim() || localStorage.getItem('groqKey') || '';
+  if (!apiKey) throw new Error('Groq API Key nao configurada. Abra Configuracoes e informe sua key.');
+  
+  const models = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile'];
+  
+  for (const modelo of models) {
+    for (let tentativa = 1; tentativa <= maxRetries; tentativa++) {
+      try {
+        if (btnEl) btnEl.textContent = '\u23F3 Groq/' + modelo.split('-').slice(0,3).join('-') + ' (tentativa ' + tentativa + ')...';
+        
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: modelo,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 32000,
+          }),
+        });
+        
+        if (res.status === 429 || res.status === 503) {
+          if (tentativa < maxRetries) {
+            const espera = tentativa * 15;
+            if (btnEl) btnEl.textContent = '\u23F3 Rate limit, aguardando ' + espera + 's...';
+            await new Promise(r => setTimeout(r, espera * 1000));
+            continue;
+          }
+          break; // tenta proximo modelo
+        }
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error('Groq erro ' + res.status + ': ' + (errData.error?.message || 'desconhecido'));
+        }
+        
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        if (text) return { text };
+      } catch (err) {
+        if (err.message && err.message.includes('Groq erro')) throw err;
+        if (tentativa === maxRetries) break;
+      }
+    }
+  }
+  throw new Error('Limite do Groq atingido. Tente novamente em alguns minutos.');
+}
+
+async function chamarGemini(userPrompt, systemInstruction, btnEl, maxRetries = 3) {
+  const apiKey = document.getElementById('geminiKey').value.trim() || localStorage.getItem('geminiKey') || '';
+  if (!apiKey) throw new Error('Gemini API Key nao configurada. Abra Configuracoes e informe sua key.');
+  
+  const ai = new GoogleGenAI({ apiKey });
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  
+  for (const m of models) {
     for (let tentativa = 1; tentativa <= maxRetries; tentativa++) {
       try {
         if (btnEl) btnEl.textContent = '\u23F3 ' + m + ' (tentativa ' + tentativa + ')...';
@@ -361,24 +427,17 @@ async function chamarGeminiComRetry(ai, modelo, userPrompt, systemInstruction, b
         const isRateLimit = code === 429 || code === 503 || (err.message && err.message.includes('RESOURCE_EXHAUSTED'));
         
         if (isRateLimit && tentativa < maxRetries) {
-          const espera = tentativa * 30; // 30s, 60s, 90s
-          if (btnEl) btnEl.textContent = '\u23F3 Limite atingido, aguardando ' + espera + 's...';
+          const espera = tentativa * 30;
+          if (btnEl) btnEl.textContent = '\u23F3 Limite, aguardando ' + espera + 's...';
           await new Promise(r => setTimeout(r, espera * 1000));
           continue;
         }
-        
-        if (isRateLimit && tentativa === maxRetries) {
-          // Tenta próximo modelo
-          break;
-        }
-        
-        // Erro não-retry (ex: 400, 500)
+        if (isRateLimit) break;
         throw err;
       }
     }
   }
-  
-  throw new Error('Limite da API Gemini atingido em todos os modelos. O limite gratuito reseta diariamente. Tente novamente mais tarde.');
+  throw new Error('Limite da API Gemini atingido. Tente Groq como alternativa ou aguarde o reset diario.');
 }
 
 // ===== GERAR RELATORIO =====
@@ -386,9 +445,6 @@ let relatorioMd = null;
 let relatorioVisualHTML = null;
 
 document.getElementById('btnGerar').addEventListener('click', async () => {
-  const apiKey = document.getElementById('geminiKey').value.trim() || localStorage.getItem('geminiKey') || '';
-  if (!apiKey) { showMsg('error','Informe a API Key do Gemini nas configuracoes.'); document.getElementById('cfgBox').setAttribute('open',''); return; }
-
   let csvRaw = '';
   if (activeSource === 'csv') {
     const fileInput = document.getElementById('csvFile');
@@ -415,8 +471,7 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
 
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await chamarGeminiComRetry(ai, 'gemini-2.5-flash', userPrompt, RELATORIO_HTML_PROMPT, btn);
+    const response = await chamarIA(userPrompt, RELATORIO_HTML_PROMPT, btn);
 
     const jsonText = response.text;
     if (!jsonText) throw new Error('Gemini nao retornou resposta.');
