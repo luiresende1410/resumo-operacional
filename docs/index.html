@@ -712,10 +712,15 @@ function resumirCSV(csv) {
     resultado += '## ' + cliente + ' (' + Math.round(info.horas*10)/10 + 'h)\n';
     resultado += 'Profissionais: ' + Object.entries(info.profissionais).map(([n,h]) => n+' ('+Math.round(h*10)/10+'h)').join(', ') + '\n';
     resultado += 'Atividades:\n';
-    const atv = info.atividades.slice(0, 10);
-    for (const a of atv) resultado += '- ' + a + '\n';
-    if (info.atividades.length > 10) resultado += '- ... e mais ' + (info.atividades.length - 10) + ' atividades\n';
+    const atv = info.atividades.slice(0, 5);
+    for (const a of atv) resultado += '- ' + a.substring(0, 80) + '\n';
+    if (info.atividades.length > 5) resultado += '- ... e mais ' + (info.atividades.length - 5) + ' atividades\n';
     resultado += '\n';
+  }
+  
+  // Limita tamanho total para caber nos limites de tokens das APIs gratuitas
+  if (resultado.length > 8000) {
+    resultado = resultado.substring(0, 8000) + '\n\n[... resumo truncado por limite de tamanho]';
   }
   
   return resultado;
