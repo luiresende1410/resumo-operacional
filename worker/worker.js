@@ -16,9 +16,10 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
 ];
 
-// Apenas permite requests para a API do Jira (seguranca)
+// Apenas permite requests para estas APIs (seguranca)
 const ALLOWED_TARGETS = [
   'atlassian.net',
+  'api.groq.com',
 ];
 
 export default {
@@ -49,7 +50,7 @@ export default {
     // Validar que o target eh Jira
     const targetHost = new URL(targetUrl).hostname;
     if (!ALLOWED_TARGETS.some(t => targetHost.endsWith(t))) {
-      return new Response(JSON.stringify({ error: 'Target not allowed. Only Jira URLs.' }), {
+      return new Response(JSON.stringify({ error: 'Target not allowed. Only Jira and Groq URLs.' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' },
       });

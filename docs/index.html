@@ -364,7 +364,11 @@ async function chamarGroq(userPrompt, systemInstruction, btnEl, maxRetries = 3) 
       try {
         if (btnEl) btnEl.textContent = '\u23F3 Groq/' + modelo.split('-').slice(0,3).join('-') + ' (tentativa ' + tentativa + ')...';
         
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const groqUrl = 'https://api.groq.com/openai/v1/chat/completions';
+        const proxyUrl = document.getElementById('proxyUrl').value.trim() || localStorage.getItem('proxyUrl') || '';
+        const fetchUrl = proxyUrl ? proxyUrl + '?url=' + encodeURIComponent(groqUrl) : groqUrl;
+        
+        const res = await fetch(fetchUrl, {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
           body: JSON.stringify({
