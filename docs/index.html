@@ -476,7 +476,9 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     if (destClientes.trim()) obs += 'Destaques de Clientes:\n' + destClientes + '\n\n';
     if (destProf.trim()) obs += 'Destaques de Profissionais:\n' + destProf + '\n\n';
 
-    let userPrompt = 'Lista de atividades (CSV):\n\n' + csvRaw;
+    // Resumir CSV para reduzir tokens (agrupa por cliente+profissional)
+    const csvResumido = resumirCSV(csvRaw);
+    let userPrompt = 'Lista de atividades da semana (resumida por cliente e profissional):\n\n' + csvResumido;
     if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
 
@@ -649,6 +651,63 @@ window._excluirRel = function(id) {
   showMsg('success','Relatorio excluido.');
 };
 renderHistorico();
+
+// Resume CSV agrupando atividades para reduzir tokens
+function resumirCSV(csv) {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return csv;
+  
+  const header = lines[0];
+  const cols = header.split(',');
+  const iCliente = cols.findIndex(c => c.trim().toLowerCase().includes('cliente'));
+  const iNome = cols.findIndex(c => c.trim().toLowerCase().includes('nome'));
+  const iResumo = cols.findIndex(c => c.trim().toLowerCase().includes('resumo'));
+  const iStatus = cols.findIndex(c => c.trim().toLowerCase().includes('status'));
+  const iHoras = cols.findIndex(c => c.trim().toLowerCase().includes('hora'));
+  const iData = cols.findIndex(c => c.trim().toLowerCase().includes('data'));
+  
+  // Agrupa por cliente
+  const porCliente = {};
+  const datas = [];
+  let totalHoras = 0;
+  
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(',');
+    if (parts.length < 3) continue;
+    const cliente = (iCliente >= 0 ? parts[iCliente] : '').trim() || 'Sem cliente';
+    const nome = (iNome >= 0 ? parts[iNome] : '').trim() || '?';
+    const resumo = (iResumo >= 0 ? parts[iResumo] : '').trim();
+    const status = (iStatus >= 0 ? parts[iStatus] : '').trim();
+    const horas = iHoras >= 0 ? parseFloat(parts[iHoras]) || 0 : 0;
+    const data = (iData >= 0 ? parts[iData] : '').trim();
+    
+    if (data) datas.push(data);
+    totalHoras += horas;
+    
+    if (!porCliente[cliente]) porCliente[cliente] = { horas: 0, atividades: [], profissionais: {} };
+    porCliente[cliente].horas += horas;
+    porCliente[cliente].atividades.push(resumo + (status ? ' ['+status+']' : ''));
+    if (!porCliente[cliente].profissionais[nome]) porCliente[cliente].profissionais[nome] = 0;
+    porCliente[cliente].profissionais[nome] += horas;
+  }
+  
+  datas.sort();
+  let resultado = 'Periodo: ' + (datas[0] || '?') + ' a ' + (datas[datas.length-1] || '?') + '\n';
+  resultado += 'Total: ' + (lines.length-1) + ' atividades, ' + Math.round(totalHoras*10)/10 + ' horas\n\n';
+  
+  for (const [cliente, info] of Object.entries(porCliente)) {
+    resultado += '## ' + cliente + ' (' + Math.round(info.horas*10)/10 + 'h)\n';
+    resultado += 'Profissionais: ' + Object.entries(info.profissionais).map(([n,h]) => n+' ('+Math.round(h*10)/10+'h)').join(', ') + '\n';
+    resultado += 'Atividades:\n';
+    // Limita a 10 atividades por cliente para não estourar tokens
+    const atv = info.atividades.slice(0, 10);
+    for (const a of atv) resultado += '- ' + a + '\n';
+    if (info.atividades.length > 10) resultado += '- ... e mais ' + (info.atividades.length - 10) + ' atividades\n';
+    resultado += '\n';
+  }
+  
+  return resultado;
+}
 
 // ===== HELPERS =====
 function showMsg(type, text) { const m=document.getElementById('msg'); m.style.display='block'; m.className='msg '+type; m.textContent=text; }
