@@ -401,7 +401,12 @@ async function chamarGroq(userPrompt, systemInstruction, btnEl, maxRetries = 3) 
         const text = data.choices?.[0]?.message?.content || '';
         if (text) return { text };
       } catch (err) {
+        console.error('Groq tentativa ' + tentativa + ' erro:', err.message);
         if (err.message && err.message.includes('Groq erro')) throw err;
+        // CORS ou rede — propaga imediatamente para mostrar ao usuario
+        if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+          throw new Error('Groq: erro de conexao. Verifique se a Proxy URL esta configurada e se o Worker aceita api.groq.com. Erro: ' + err.message);
+        }
         if (tentativa === maxRetries) break;
       }
     }
