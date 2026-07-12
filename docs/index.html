@@ -454,6 +454,7 @@ let relatorioMd = null;
 let relatorioVisualHTML = null;
 
 document.getElementById('btnGerar').addEventListener('click', async () => {
+  console.log('[v2] Gerar relatorio iniciado');
   let csvRaw = '';
   if (activeSource === 'csv') {
     const fileInput = document.getElementById('csvFile');
@@ -477,7 +478,14 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     if (destProf.trim()) obs += 'Destaques de Profissionais:\n' + destProf + '\n\n';
 
     // Resumir CSV para reduzir tokens (agrupa por cliente+profissional)
-    const csvResumido = resumirCSV(csvRaw);
+    let csvResumido;
+    try {
+      csvResumido = resumirCSV(csvRaw);
+      console.log('[v2] CSV resumido com sucesso, tamanho:', csvResumido.length);
+    } catch(csvErr) {
+      console.warn('Erro ao resumir CSV, usando original:', csvErr);
+      csvResumido = csvRaw;
+    }
     let userPrompt = 'Lista de atividades da semana (resumida por cliente e profissional):\n\n' + csvResumido;
     if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
