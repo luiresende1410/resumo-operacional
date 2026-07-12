@@ -525,6 +525,10 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
         if (relatorioData) break; // sucesso
       } catch(provErr) {
         console.warn(prov + ' falhou:', provErr.message);
+        // Se é o provedor que o usuario escolheu e nao é erro de JSON truncado, mostra o erro direto
+        if (prov === provedor && !provErr.message.includes('resposta incompleta') && !provErr.message.includes('JSON')) {
+          throw provErr;
+        }
         if (prov === tentativas[tentativas.length - 1]) throw provErr; // ultimo, propaga erro
         if (btn) btn.textContent = '\u23F3 ' + prov + ' falhou, tentando alternativa...';
         await new Promise(r => setTimeout(r, 1000));
