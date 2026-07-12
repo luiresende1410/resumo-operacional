@@ -481,12 +481,16 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     let csvResumido;
     try {
       csvResumido = resumirCSV(csvRaw);
-      console.log('[v2] CSV resumido com sucesso, tamanho:', csvResumido.length);
     } catch(csvErr) {
       console.warn('Erro ao resumir CSV, usando original:', csvErr);
       csvResumido = csvRaw;
     }
-    let userPrompt = 'Lista de atividades da semana (resumida por cliente e profissional):\n\n' + csvResumido;
+    // Garante limite de 6000 chars para caber no free tier
+    if (csvResumido.length > 6000) {
+      csvResumido = csvResumido.substring(0, 6000) + '\n[...truncado]';
+    }
+    console.log('[v2] Prompt tamanho final:', csvResumido.length);
+    let userPrompt = 'Lista de atividades da semana (resumida):\n\n' + csvResumido;
     if (obs) userPrompt += '\n\nObservacoes do gestor:\n' + obs;
     userPrompt += '\n\nGere o JSON estruturado conforme instruido.';
 
