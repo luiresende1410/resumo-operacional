@@ -657,14 +657,17 @@ function resumirCSV(csv) {
   const lines = csv.trim().split('\n');
   if (lines.length < 2) return csv;
   
+  // Detecta separador (virgula ou ponto-virgula)
   const header = lines[0];
-  const cols = header.split(',');
-  const iCliente = cols.findIndex(c => c.trim().toLowerCase().includes('cliente'));
-  const iNome = cols.findIndex(c => c.trim().toLowerCase().includes('nome'));
-  const iResumo = cols.findIndex(c => c.trim().toLowerCase().includes('resumo'));
-  const iStatus = cols.findIndex(c => c.trim().toLowerCase().includes('status'));
-  const iHoras = cols.findIndex(c => c.trim().toLowerCase().includes('hora'));
-  const iData = cols.findIndex(c => c.trim().toLowerCase().includes('data'));
+  const sep = header.includes(';') ? ';' : ',';
+  const cols = header.split(sep).map(c => c.trim().toLowerCase().replace(/"/g, ''));
+  
+  const iCliente = cols.findIndex(c => c.includes('cliente') || c.includes('organiz'));
+  const iNome = cols.findIndex(c => c.includes('nome') || c.includes('responsavel') || c.includes('assignee'));
+  const iResumo = cols.findIndex(c => c.includes('resumo') || c.includes('summary') || c.includes('descri'));
+  const iStatus = cols.findIndex(c => c.includes('status'));
+  const iHoras = cols.findIndex(c => c.includes('hora') || c.includes('hours') || c.includes('tempo'));
+  const iData = cols.findIndex(c => c.includes('data') || c.includes('date'));
   
   // Agrupa por cliente
   const porCliente = {};
@@ -672,21 +675,23 @@ function resumirCSV(csv) {
   let totalHoras = 0;
   
   for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(',');
-    if (parts.length < 3) continue;
-    const cliente = (iCliente >= 0 ? parts[iCliente] : '').trim() || 'Sem cliente';
-    const nome = (iNome >= 0 ? parts[iNome] : '').trim() || '?';
-    const resumo = (iResumo >= 0 ? parts[iResumo] : '').trim();
-    const status = (iStatus >= 0 ? parts[iStatus] : '').trim();
-    const horas = iHoras >= 0 ? parseFloat(parts[iHoras]) || 0 : 0;
-    const data = (iData >= 0 ? parts[iData] : '').trim();
+    if (!lines[i].trim()) continue;
+    const parts = lines[i].split(sep).map(p => (p || '').replace(/"/g, '').trim());
+    if (parts.length < 2) continue;
+    
+    const cliente = (iCliente >= 0 && parts[iCliente]) ? parts[iCliente] : 'Sem cliente';
+    const nome = (iNome >= 0 && parts[iNome]) ? parts[iNome] : '?';
+    const resumo = (iResumo >= 0 && parts[iResumo]) ? parts[iResumo] : '';
+    const status = (iStatus >= 0 && parts[iStatus]) ? parts[iStatus] : '';
+    const horas = (iHoras >= 0 && parts[iHoras]) ? (parseFloat(parts[iHoras].replace(',', '.')) || 0) : 0;
+    const data = (iData >= 0 && parts[iData]) ? parts[iData] : '';
     
     if (data) datas.push(data);
     totalHoras += horas;
     
     if (!porCliente[cliente]) porCliente[cliente] = { horas: 0, atividades: [], profissionais: {} };
     porCliente[cliente].horas += horas;
-    porCliente[cliente].atividades.push(resumo + (status ? ' ['+status+']' : ''));
+    if (resumo) porCliente[cliente].atividades.push(resumo + (status ? ' ['+status+']' : ''));
     if (!porCliente[cliente].profissionais[nome]) porCliente[cliente].profissionais[nome] = 0;
     porCliente[cliente].profissionais[nome] += horas;
   }
@@ -699,7 +704,6 @@ function resumirCSV(csv) {
     resultado += '## ' + cliente + ' (' + Math.round(info.horas*10)/10 + 'h)\n';
     resultado += 'Profissionais: ' + Object.entries(info.profissionais).map(([n,h]) => n+' ('+Math.round(h*10)/10+'h)').join(', ') + '\n';
     resultado += 'Atividades:\n';
-    // Limita a 10 atividades por cliente para não estourar tokens
     const atv = info.atividades.slice(0, 10);
     for (const a of atv) resultado += '- ' + a + '\n';
     if (info.atividades.length > 10) resultado += '- ... e mais ' + (info.atividades.length - 10) + ' atividades\n';
