@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompt-template.js';
 import { gerarDashboardHTML } from './dashboard-template.js';
 import { RELATORIO_HTML_SYSTEM_PROMPT, buildRelatorioUserPrompt, gerarRelatorioHTML } from './relatorio-html-template.js';
+import { RESUMO_TIME_SYSTEM_PROMPT, buildResumoTimeUserPrompt, gerarResumoTimeHTML } from './resumo-time-template.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -170,6 +171,64 @@ app.post('/api/gerar-html', upload.any(), async (req, res) => {
 
     console.log('[API] Relatório HTML gerado com sucesso.');
     res.json({ relatorioHTML: relatorioHTMLContent });
+  } catch (err) {
+    console.error('[API] Erro:', err.message || err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
+// Endpoint para gerar Resumo Gerencial do Time (visão executiva focada no time)
+app.post('/api/gerar-resumo-time', upload.any(), async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY não configurada.' });
+    }
+
+    const csvFile = req.files && req.files.find(f => f.fieldname === 'csv');
+    if (!csvFile) {
+      return res.status(400).json({ error: 'Nenhum arquivo CSV enviado.' });
+    }
+
+    const csvRaw = csvFile.buffer.toString('utf-8');
+    const destaquesClientes = req.body.destaquesClientes || '';
+    const destaquesProfissionais = req.body.destaquesProfissionais || '';
+
+    let observacoes = '';
+    if (destaquesClientes.trim()) observacoes += 'Destaques de Clientes:\n' + destaquesClientes + '\n\n';
+    if (destaquesProfissionais.trim()) observacoes += 'Destaques de Profissionais:\n' + destaquesProfissionais + '\n\n';
+
+    console.log('[API] Gerando Resumo Gerencial do Time...');
+    const ai = new GoogleGenAI({ apiKey });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: buildResumoTimeUserPrompt(csvRaw, observacoes),
+      config: {
+        systemInstruction: RESUMO_TIME_SYSTEM_PROMPT,
+        temperature: 0.7,
+        maxOutputTokens: 65536,
+      },
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) {
+      return res.status(500).json({ error: 'Gemini não retornou resposta.' });
+    }
+
+    let resumoData;
+    try {
+      const cleanJson = jsonText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      resumoData = JSON.parse(cleanJson);
+    } catch (e) {
+      return res.status(500).json({ error: 'Não foi possível parsear a resposta do Gemini como JSON.' });
+    }
+
+    const dataHoje = new Date().toISOString().split('T')[0];
+    const resumoHTML = gerarResumoTimeHTML(resumoData, dataHoje);
+
+    console.log('[API] Resumo do Time gerado com sucesso.');
+    res.json({ resumoHTML });
   } catch (err) {
     console.error('[API] Erro:', err.message || err);
     res.status(500).json({ error: err.message || 'Erro interno.' });

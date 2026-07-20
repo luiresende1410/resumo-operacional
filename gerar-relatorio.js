@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompt-template.js';
 import { gerarDashboardHTML } from './dashboard-template.js';
 import { RELATORIO_HTML_SYSTEM_PROMPT, buildRelatorioUserPrompt, gerarRelatorioHTML } from './relatorio-html-template.js';
+import { RESUMO_TIME_SYSTEM_PROMPT, buildResumoTimeUserPrompt, gerarResumoTimeHTML } from './resumo-time-template.js';
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ program
   .option('--output <pasta>', 'Pasta de saída', 'output')
   .option('--modelo <modelo>', 'Modelo do Gemini a usar', 'gemini-2.5-flash')
   .option('--html', 'Gerar também o relatório HTML estilizado com navegação lateral')
+  .option('--time', 'Gerar resumo gerencial focado no time (visão executiva para diretoria)')
   .parse();
 
 const opts = program.opts();
@@ -163,6 +165,37 @@ async function main() {
     console.log(`🎨 Relatório HTML salvo: ${htmlPath}`);
   }
 
+  // Gerar resumo do time (se --time)
+  if (opts.time) {
+    console.log('👥 Gerando resumo gerencial do time...');
+
+    const responseTime = await ai.models.generateContent({
+      model: opts.modelo,
+      contents: buildResumoTimeUserPrompt(csvRaw, opts.obs),
+      config: {
+        systemInstruction: RESUMO_TIME_SYSTEM_PROMPT,
+        temperature: 0.7,
+        maxOutputTokens: 65536,
+      },
+    });
+
+    const jsonTextTime = responseTime.text;
+    let resumoData;
+
+    try {
+      const cleanJson = jsonTextTime.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      resumoData = JSON.parse(cleanJson);
+    } catch (e) {
+      console.warn('⚠️  Não foi possível parsear JSON do resumo do time, usando dados básicos');
+      resumoData = buildFallbackResumoTime(records, metricasLocais);
+    }
+
+    const resumoTimeHTMLContent = gerarResumoTimeHTML(resumoData, dataHoje);
+    const timePath = `${opts.output}/resumo-time-${dataHoje}.html`;
+    writeFileSync(timePath, resumoTimeHTMLContent, 'utf-8');
+    console.log(`👥 Resumo do Time salvo: ${timePath}`);
+  }
+
   console.log('\n🎉 Pronto! Abra o dashboard no navegador para visualizar.');
 }
 
@@ -214,6 +247,47 @@ function calcularMetricas(records) {
       'FinOps / Otimização de Custos': 15,
     },
     topClientes,
+  };
+}
+
+function buildFallbackResumoTime(records, metricas) {
+  const profissionais = [...new Set(records.map(r => r.Nome).filter(Boolean))];
+  const clientes = [...new Set(records.map(r => r.Cliente).filter(Boolean))];
+
+  return {
+    periodo: metricas.periodo,
+    resumoExecutivo: `Semana com ${metricas.totalAtividades} atividades e ${metricas.totalHoras}h registradas, atendendo ${clientes.length} clientes com ${profissionais.length} profissionais.`,
+    kpis: {
+      totalAtividades: metricas.totalAtividades,
+      totalHoras: metricas.totalHoras,
+      totalClientes: clientes.length,
+      totalProfissionais: profissionais.length,
+      mediaHorasPorProfissional: Math.round((metricas.totalHoras / (profissionais.length || 1)) * 10) / 10,
+    },
+    atividadesPorCliente: clientes.map(c => ({
+      cliente: c,
+      atividades: records.filter(r => r.Cliente === c).length,
+      horas: Math.round(records.filter(r => r.Cliente === c).reduce((s, r) => s + (parseFloat(r.Horas) || 0), 0) * 10) / 10,
+      principaisEntregas: records.filter(r => r.Cliente === c).slice(0, 2).map(r => r.Resumo || 'Atividade'),
+    })),
+    atividadesPorPilar: [
+      { pilar: 'Segurança e Governança', percentual: 25, atividades: 0, horas: 0, destaques: [] },
+      { pilar: 'Infraestrutura / DevOps', percentual: 30, atividades: 0, horas: 0, destaques: [] },
+      { pilar: 'Sustentação e Incidentes', percentual: 30, atividades: 0, horas: 0, destaques: [] },
+      { pilar: 'FinOps / Otimização de Custos', percentual: 15, atividades: 0, horas: 0, destaques: [] },
+    ],
+    topAtividades: records.slice(0, 5).map(r => ({
+      titulo: r.Resumo || 'Atividade', cliente: r.Cliente || '-', profissional: r.Nome || '-', horas: parseFloat(r.Horas) || 0, impacto: '',
+    })),
+    destaquesProfissionais: profissionais.map(nome => ({
+      nome,
+      iniciais: nome.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase(),
+      horas: Math.round(records.filter(r => r.Nome === nome).reduce((s, r) => s + (parseFloat(r.Horas) || 0), 0) * 10) / 10,
+      atividades: records.filter(r => r.Nome === nome).length,
+      clientes: [...new Set(records.filter(r => r.Nome === nome).map(r => r.Cliente).filter(Boolean))],
+      destaque: 'Contribuição nas atividades do período.',
+    })),
+    volumePorStatus: metricas.atividadesPorStatus,
   };
 }
 
