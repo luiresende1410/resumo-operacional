@@ -212,8 +212,12 @@ app.innerHTML = `
   <div id="jiraPreview" style="display:none;background:#2d2d2d;border:1px solid #555;border-radius:6px;padding:12px;margin-bottom:16px;font-size:.8rem;color:#aaa;max-height:150px;overflow-y:auto"></div>
 </div>
 <div class="field"><label>&#x1F3E2; Nome do Cliente</label><input type="text" id="nomeCliente" placeholder="Ex: VBS, ACME CORP"></div>
+<div class="field"><label>&#x1F4C5; Periodo do Relatorio</label><input type="text" id="periodo" placeholder="Ex: 14/07 a 18/07/2026"><p class="hint">Informe o periodo que sera exibido no relatorio</p></div>
 <div class="field"><label>&#x1F4DD; Observacoes (opcional)</label><textarea id="observacoes" placeholder="Contextos relevantes sobre o periodo (opcional)"></textarea></div>
-<button type="button" id="btnGerar" class="btn-gerar">&#x26A1; Gerar Services Book</button>
+<div class="row">
+  <button type="button" id="btnGerar" class="btn-gerar" style="background:#2563eb">&#x1F4D8; Book de Servicos</button>
+  <button type="button" id="btnGerarGestao" class="btn-gerar" style="background:#059669">&#x1F4CA; Relatorio de Gestao</button>
+</div>
 <div class="msg" id="msg"></div>
 <div class="resultado" id="resultado">
   <div class="resultado-actions">
@@ -472,8 +476,10 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
 
   try {
     const nomeCliente = document.getElementById('nomeCliente').value.trim() || 'Cliente';
+    const periodoInformado = document.getElementById('periodo').value.trim();
     const observacoes = document.getElementById('observacoes').value.trim();
     let obs = '';
+    if (periodoInformado) obs += 'Periodo do relatorio: ' + periodoInformado + '\n\n';
     if (observacoes) obs += 'Observacoes do gestor:\n' + observacoes + '\n\n';
 
     // Resumir CSV para reduzir tokens (agrupa por cliente+profissional)
@@ -491,7 +497,7 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     console.log('[v2] Prompt tamanho final:', csvResumido.length);
     let userPrompt = 'Cliente: ' + nomeCliente + '\n\nAtividades do periodo:\n\n' + csvResumido;
     if (obs) userPrompt += '\n\n' + obs;
-    userPrompt += '\n\nGere o JSON estruturado do Services Book conforme instruido.';
+    userPrompt += '\n\nGere o JSON estruturado do Services Book conforme instruido. Se o periodo foi informado nas observacoes, use-o exatamente no campo "periodo".';
 
     let relatorioData = null;
     const provedor = document.getElementById('provedor').value || localStorage.getItem('provedor') || 'gemini';
@@ -562,9 +568,127 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
     console.error(err);
     showMsg('error', err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '\u26A1 Gerar Relatorio';
+    btn.disabled = false; btn.textContent = '\u{1F4D8} Book de Servicos';
   }
 });
+
+// ===== RELATORIO DE GESTAO (Time) =====
+const RESUMO_TIME_PROMPT = `Voce e um Diretor de Operacoes de Cloud preparando um resumo executivo semanal para a diretoria. Transforme dados brutos de atividades em um resumo focado no DESEMPENHO DO TIME.
+
+IMPORTANTE: Responda APENAS com JSON valido. Sem markdown, sem crases, sem texto adicional.
+
+DIRETRIZES:
+1. Foco no TIME: quem fez o que, quanto produziu, onde se destacou.
+2. Tom executivo e direto - dados objetivos, sem enrolacao.
+3. Agrupe atividades por cliente E por pilar estrategico.
+4. Destaque volume (quantidade de demandas) e esforco (horas).
+5. Reconheca profissionais com base em dados reais.
+6. Mantenha nomes de clientes em CAIXA ALTA.
+7. Se o periodo foi informado nas observacoes, use-o exatamente como fornecido.
+
+Estrutura JSON:
+{
+  "periodo": "DD/MM a DD/MM",
+  "resumoExecutivo": "Paragrafo de 2-3 linhas com visao geral da semana do time.",
+  "kpis": { "totalAtividades": 0, "totalHoras": 0, "totalClientes": 0, "totalProfissionais": 0, "mediaHorasPorProfissional": 0 },
+  "atividadesPorCliente": [{ "cliente": "NOME", "atividades": 0, "horas": 0, "principaisEntregas": ["Entrega 1"] }],
+  "atividadesPorPilar": [
+    { "pilar": "Seguranca e Governanca", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] },
+    { "pilar": "Infraestrutura / DevOps", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] },
+    { "pilar": "Sustentacao e Incidentes", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] },
+    { "pilar": "FinOps / Otimizacao de Custos", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] }
+  ],
+  "topAtividades": [{ "titulo": "Titulo", "cliente": "NOME", "profissional": "Nome", "horas": 0, "impacto": "Descricao" }],
+  "destaquesProfissionais": [{ "nome": "Nome", "iniciais": "NC", "horas": 0, "atividades": 0, "clientes": ["CLIENTE"], "destaque": "Reconhecimento." }],
+  "volumePorStatus": { "Concluido": 0, "Em andamento": 0 }
+}
+
+Percentuais em atividadesPorPilar somam 100%. Gere 5-10 topAtividades. Ordene atividadesPorCliente por horas decrescente. Um item por profissional.`;
+
+document.getElementById('btnGerarGestao').addEventListener('click', async () => {
+  let csvRaw = '';
+  if (activeSource === 'csv') {
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files || !fileInput.files[0]) { showMsg('error','Selecione um arquivo CSV.'); return; }
+    csvRaw = await fileInput.files[0].text();
+  } else {
+    if (!jiraCsvData) { showMsg('error','Busque as issues do Jira primeiro.'); return; }
+    csvRaw = jiraCsvData;
+  }
+
+  const btn = document.getElementById('btnGerarGestao');
+  btn.disabled = true; btn.textContent = '\u23F3 Gerando Relatorio de Gestao...';
+  hideMsg();
+
+  try {
+    const periodoInformado = document.getElementById('periodo').value.trim();
+    const observacoes = document.getElementById('observacoes').value.trim();
+    let obs = '';
+    if (periodoInformado) obs += 'Periodo do relatorio: ' + periodoInformado + '\n\n';
+    if (observacoes) obs += 'Observacoes do gestor:\n' + observacoes + '\n\n';
+
+    let csvResumido;
+    try { csvResumido = resumirCSV(csvRaw); } catch(e) { csvResumido = csvRaw; }
+    if (csvResumido.length > 6000) csvResumido = csvResumido.substring(0, 6000) + '\n[...truncado]';
+
+    let userPrompt = 'Dados de atividades da semana do time:\n\n' + csvResumido;
+    if (obs) userPrompt += '\n\n' + obs;
+    userPrompt += '\n\nGere o JSON estruturado conforme instruido. Se o periodo foi informado, use-o no campo "periodo".';
+
+    const response = await chamarIA(userPrompt, RESUMO_TIME_PROMPT, btn);
+    const jsonText = response.text;
+    if (!jsonText) throw new Error('Sem resposta da IA.');
+
+    const cleanJson = jsonText.replace(/```json?\n?/g,'').replace(/```/g,'').trim();
+    let resumoData;
+    try {
+      resumoData = JSON.parse(cleanJson);
+    } catch(e) {
+      let fixed = cleanJson.replace(/,"[^"]*"?:?"?[^"{}[\]]*$/, '').replace(/,\s*"[^"]*$/, '');
+      const opens = (fixed.match(/[{[]/g) || []).length;
+      const closes = (fixed.match(/[}\]]/g) || []).length;
+      for (let i = 0; i < opens - closes; i++) fixed += fixed.lastIndexOf('{') > fixed.lastIndexOf('[') ? '}' : ']';
+      resumoData = JSON.parse(fixed);
+    }
+
+    const html = buildResumoTimeVisualHTML(resumoData);
+    const blob = new Blob([html], {type:'text/html'});
+    window.open(URL.createObjectURL(blob), '_blank');
+    showMsg('success','Relatorio de Gestao gerado! Aberto em nova aba.');
+  } catch(err) {
+    console.error(err);
+    showMsg('error', err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '\u{1F4CA} Relatorio de Gestao';
+  }
+});
+
+function buildResumoTimeVisualHTML(data) {
+  const { periodo, resumoExecutivo, kpis, atividadesPorCliente, atividadesPorPilar, topAtividades, destaquesProfissionais, volumePorStatus } = data;
+  const pilarLabels = JSON.stringify((atividadesPorPilar||[]).map(p=>p.pilar));
+  const pilarValues = JSON.stringify((atividadesPorPilar||[]).map(p=>p.percentual));
+  const clienteLabels = JSON.stringify((atividadesPorCliente||[]).map(c=>c.cliente));
+  const clienteHoras = JSON.stringify((atividadesPorCliente||[]).map(c=>c.horas));
+  const dataGeracao = new Date().toISOString().split('T')[0];
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Resumo Gerencial do Time</title>
+<`+`script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><`+`/script>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;color:#1e293b;line-height:1.6}.page{max-width:1000px;margin:0 auto;padding:40px 48px;background:white;min-height:100vh;box-shadow:0 0 40px rgba(0,0,0,.04)}.report-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:24px;margin-bottom:32px;border-bottom:2px solid #e2e8f0}.header-left{display:flex;align-items:center;gap:16px}.logo-mark{width:48px;height:48px;background:#f26522;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center}.logo-mark span{font-family:'Arial Black',sans-serif;font-size:9px;font-weight:900;color:white;line-height:1.2}.header-text h1{font-size:1.4rem;font-weight:700;color:#0f172a}.header-subtitle{font-size:.85rem;color:#64748b;margin-top:2px}.header-badge{background:#f0fdf4;color:#166534;font-size:.75rem;font-weight:600;padding:6px 14px;border-radius:20px;border:1px solid #bbf7d0}.section{margin-bottom:40px}.section h2{font-size:1.1rem;font-weight:700;color:#0f172a;margin-bottom:20px;padding-bottom:8px;border-bottom:1px solid #e2e8f0}.resumo-exec{font-size:.95rem;color:#475569;line-height:1.7;padding:20px 24px;background:#f8fafc;border-left:4px solid #f26522;border-radius:0 8px 8px 0}.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}.kpi{text-align:center;padding:20px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}.kpi-number{font-size:1.8rem;font-weight:800;color:#0f172a}.kpi-label{font-size:.7rem;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.chart-box{background:#f8fafc;border-radius:10px;padding:20px;border:1px solid #e2e8f0}.chart-box h3{font-size:.85rem;color:#475569;margin-bottom:12px;font-weight:600}.chart-box canvas{max-height:260px}.pilar-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pilar-card{background:#f8fafc;border-radius:10px;padding:16px 20px;border:1px solid #e2e8f0}.pilar-header{padding-left:12px;margin-bottom:12px}.pilar-title{font-weight:700;font-size:.85rem;color:#0f172a}.pilar-stats{font-size:.75rem;color:#64748b;margin-top:2px}.pilar-destaques{list-style:none;padding:0}.pilar-destaques li{font-size:.8rem;color:#475569;padding:4px 0;border-bottom:1px solid #f1f5f9}.pilar-destaques li:last-child{border-bottom:none}.table-wrapper{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.8rem}th,td{padding:10px 14px;text-align:left;border-bottom:1px solid #e2e8f0}th{background:#f8fafc;color:#475569;font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.3px}td strong{color:#0f172a}.prof-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}.prof-card{display:flex;gap:14px;align-items:flex-start;padding:16px 20px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}.prof-avatar{width:40px;height:40px;border-radius:50%;background:#f26522;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}.prof-name{font-weight:700;font-size:.85rem;color:#0f172a}.prof-metrics{font-size:.72rem;color:#64748b;margin:2px 0 6px}.prof-destaque{font-size:.8rem;color:#475569;line-height:1.5}.report-footer{margin-top:48px;padding-top:20px;border-top:2px solid #e2e8f0;display:flex;align-items:center;gap:12px;font-size:.75rem;color:#94a3b8}.footer-logo{width:28px;height:28px;background:#f26522;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center}.footer-logo span{font-family:'Arial Black',sans-serif;font-size:5px;font-weight:900;color:white;line-height:1.1}@media print{body{background:white}.page{box-shadow:none;padding:20px}}@media(max-width:768px){.page{padding:20px 16px}.kpi-grid{grid-template-columns:repeat(2,1fr)}.charts-grid{grid-template-columns:1fr}.pilar-cards{grid-template-columns:1fr}.prof-grid{grid-template-columns:1fr}.report-header{flex-direction:column;align-items:flex-start;gap:12px}}</style></head><body><div class="page">
+<header class="report-header"><div class="header-left"><div class="logo-mark"><span>CLOUD</span><span>DOG</span></div><div class="header-text"><h1>Resumo Gerencial do Time</h1><p class="header-subtitle">Cloud Management Services - ${periodo||dataGeracao}</p></div></div><div class="header-badge">Relatorio Semanal</div></header>
+<section class="section"><p class="resumo-exec">${resumoExecutivo||''}</p></section>
+<section class="section"><div class="kpi-grid"><div class="kpi"><div class="kpi-number">${kpis?.totalAtividades||0}</div><div class="kpi-label">Atividades</div></div><div class="kpi"><div class="kpi-number">${kpis?.totalHoras||0}h</div><div class="kpi-label">Horas Trabalhadas</div></div><div class="kpi"><div class="kpi-number">${kpis?.totalClientes||0}</div><div class="kpi-label">Clientes Atendidos</div></div><div class="kpi"><div class="kpi-number">${kpis?.totalProfissionais||0}</div><div class="kpi-label">Profissionais</div></div><div class="kpi"><div class="kpi-number">${kpis?.mediaHorasPorProfissional||0}h</div><div class="kpi-label">Media por Profissional</div></div></div></section>
+<section class="section"><h2>Distribuicao do Esforco</h2><div class="charts-grid"><div class="chart-box"><h3>Por Pilar Estrategico</h3><canvas id="chartPilares"></canvas></div><div class="chart-box"><h3>Horas por Cliente</h3><canvas id="chartClientes"></canvas></div></div></section>
+<section class="section"><h2>Esforco por Pilar</h2><div class="pilar-cards">${(atividadesPorPilar||[]).map((p,i)=>'<div class="pilar-card"><div class="pilar-header" style="border-left:4px solid '+['#2563eb','#059669','#d97706','#7c3aed'][i]+'"><div class="pilar-title">'+p.pilar+'</div><div class="pilar-stats">'+p.atividades+' atividades · '+p.horas+'h · '+p.percentual+'%</div></div><ul class="pilar-destaques">'+(p.destaques||[]).map(d=>'<li>'+d+'</li>').join('')+'</ul></div>').join('')}</div></section>
+<section class="section"><h2>Principais Entregas da Semana</h2><div class="table-wrapper"><table><thead><tr><th>#</th><th>Atividade</th><th>Cliente</th><th>Profissional</th><th>Horas</th><th>Impacto</th></tr></thead><tbody>${(topAtividades||[]).map((a,i)=>'<tr><td>'+(i+1)+'</td><td><strong>'+a.titulo+'</strong></td><td>'+a.cliente+'</td><td>'+a.profissional+'</td><td>'+a.horas+'h</td><td>'+a.impacto+'</td></tr>').join('')}</tbody></table></div></section>
+<section class="section"><h2>Volume por Cliente</h2><div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Atividades</th><th>Horas</th><th>Principais Entregas</th></tr></thead><tbody>${(atividadesPorCliente||[]).map(c=>'<tr><td><strong>'+c.cliente+'</strong></td><td>'+c.atividades+'</td><td>'+c.horas+'h</td><td>'+(c.principaisEntregas||[]).join('; ')+'</td></tr>').join('')}</tbody></table></div></section>
+<section class="section"><h2>Destaques do Time</h2><div class="prof-grid">${(destaquesProfissionais||[]).map(p=>'<div class="prof-card"><div class="prof-avatar">'+(p.iniciais||p.nome.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase())+'</div><div class="prof-body"><div class="prof-name">'+p.nome+'</div><div class="prof-metrics">'+p.atividades+' atividades · '+p.horas+'h · '+(p.clientes||[]).length+' cliente(s)</div><div class="prof-destaque">'+p.destaque+'</div></div></div>').join('')}</div></section>
+<footer class="report-footer"><div class="footer-logo"><span>CLOUD</span><span>DOG</span></div><span>Gerado automaticamente em ${dataGeracao} - Cloud Management Services</span></footer>
+</div>
+<`+`script>
+new Chart(document.getElementById('chartPilares'),{type:'doughnut',data:{labels:${pilarLabels},datasets:[{data:${pilarValues},backgroundColor:['#2563eb','#059669','#d97706','#7c3aed'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:16}}}}});
+new Chart(document.getElementById('chartClientes'),{type:'bar',data:{labels:${clienteLabels},datasets:[{label:'Horas',data:${clienteHoras},backgroundColor:'#2563eb',borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,title:{display:true,text:'Horas'}}}}});
+<`+`/script></body></html>`;
+}
 
 // ===== ACTIONS =====
 document.getElementById('btnCopiar').addEventListener('click', () => {
