@@ -490,9 +490,9 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
       console.warn('Erro ao resumir CSV, usando original:', csvErr);
       csvResumido = csvRaw;
     }
-    // Garante limite de 4000 chars para caber no free tier
-    if (csvResumido.length > 4000) {
-      csvResumido = csvResumido.substring(0, 4000) + '\n[...truncado]';
+    // Garante limite de 2500 chars para caber no free tier do Groq (12k TPM)
+    if (csvResumido.length > 2500) {
+      csvResumido = csvResumido.substring(0, 2500) + '\n[...truncado]';
     }
     console.log('[v2] Prompt tamanho final:', csvResumido.length);
     let userPrompt = 'Cliente: ' + nomeCliente + '\n\nAtividades do periodo:\n\n' + csvResumido;
@@ -573,37 +573,16 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
 });
 
 // ===== RELATORIO DE GESTAO (Time) =====
-const RESUMO_TIME_PROMPT = `Voce e um Diretor de Operacoes de Cloud preparando um resumo executivo semanal para a diretoria. Transforme dados brutos de atividades em um resumo focado no DESEMPENHO DO TIME.
+const RESUMO_TIME_PROMPT = `Voce e um Diretor de Operacoes de Cloud. Gere um resumo executivo semanal do time em JSON.
 
-IMPORTANTE: Responda APENAS com JSON valido. Sem markdown, sem crases, sem texto adicional.
+RESPONDA APENAS com JSON valido. Sem markdown, sem crases.
 
-DIRETRIZES:
-1. Foco no TIME: quem fez o que, quanto produziu, onde se destacou.
-2. Tom executivo e direto - dados objetivos, sem enrolacao.
-3. Agrupe atividades por cliente E por pilar estrategico.
-4. Destaque volume (quantidade de demandas) e esforco (horas).
-5. Reconheca profissionais com base em dados reais.
-6. Mantenha nomes de clientes em CAIXA ALTA.
-7. Se o periodo foi informado nas observacoes, use-o exatamente como fornecido.
+Use os KPIs pre-calculados EXATAMENTE como fornecidos. NAO recalcule.
 
-Estrutura JSON:
-{
-  "periodo": "DD/MM a DD/MM",
-  "resumoExecutivo": "Paragrafo de 2-3 linhas com visao geral da semana do time.",
-  "kpis": { "totalAtividades": 0, "totalHoras": 0, "totalClientes": 0, "totalProfissionais": 0, "mediaHorasPorProfissional": 0 },
-  "atividadesPorCliente": [{ "cliente": "NOME", "atividades": 0, "horas": 0, "principaisEntregas": ["Entrega 1"] }],
-  "atividadesPorPilar": [
-    { "pilar": "Seguranca e Governanca", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] },
-    { "pilar": "Infraestrutura / DevOps", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] },
-    { "pilar": "Sustentacao e Incidentes", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] },
-    { "pilar": "FinOps / Otimizacao de Custos", "percentual": 0, "atividades": 0, "horas": 0, "destaques": ["Destaque"] }
-  ],
-  "topAtividades": [{ "titulo": "Titulo", "cliente": "NOME", "profissional": "Nome", "horas": 0, "impacto": "Descricao" }],
-  "destaquesProfissionais": [{ "nome": "Nome", "iniciais": "NC", "horas": 0, "atividades": 0, "clientes": ["CLIENTE"], "destaque": "Reconhecimento." }],
-  "volumePorStatus": { "Concluido": 0, "Em andamento": 0 }
-}
+JSON:
+{"periodo":"DD/MM a DD/MM","resumoExecutivo":"2-3 linhas","kpis":{"totalAtividades":0,"totalHoras":0,"totalClientes":0,"totalProfissionais":0,"mediaHorasPorProfissional":0},"atividadesPorCliente":[{"cliente":"NOME","atividades":0,"horas":0,"principaisEntregas":["..."]}],"atividadesPorPilar":[{"pilar":"Seguranca e Governanca","percentual":0,"atividades":0,"horas":0,"destaques":["..."]},{"pilar":"Infraestrutura / DevOps","percentual":0,"atividades":0,"horas":0,"destaques":["..."]},{"pilar":"Sustentacao e Incidentes","percentual":0,"atividades":0,"horas":0,"destaques":["..."]},{"pilar":"FinOps / Otimizacao de Custos","percentual":0,"atividades":0,"horas":0,"destaques":["..."]}],"topAtividades":[{"titulo":"...","cliente":"NOME","profissional":"Nome","horas":0,"impacto":"..."}],"destaquesProfissionais":[{"nome":"Nome","iniciais":"NC","horas":0,"atividades":0,"clientes":["CLIENTE"],"destaque":"Reconhecimento."}],"volumePorStatus":{"Concluido":0,"Em andamento":0}}
 
-Percentuais em atividadesPorPilar somam 100%. Gere 5-10 topAtividades. Ordene atividadesPorCliente por horas decrescente. Um item por profissional.`;
+Percentuais somam 100%. 5-10 topAtividades. Clientes em CAIXA ALTA. Um item por profissional.`;
 
 document.getElementById('btnGerarGestao').addEventListener('click', async () => {
   let csvRaw = '';
@@ -632,7 +611,7 @@ document.getElementById('btnGerarGestao').addEventListener('click', async () => 
 
     let csvResumido;
     try { csvResumido = resumirCSV(csvRaw); } catch(e) { csvResumido = csvRaw; }
-    if (csvResumido.length > 4000) csvResumido = csvResumido.substring(0, 4000) + '\n[...truncado]';
+    if (csvResumido.length > 2500) csvResumido = csvResumido.substring(0, 2500) + '\n[...truncado]';
 
     let userPrompt = 'Dados de atividades da semana do time:\n\n' + csvResumido;
     userPrompt += '\n\n### METRICAS PRE-CALCULADAS (use EXATAMENTE estes valores nos KPIs):\n';
@@ -1049,8 +1028,8 @@ function resumirCSV(csv) {
   }
   
   // Limita tamanho total para caber nos limites de tokens das APIs gratuitas
-  if (resultado.length > 5000) {
-    resultado = resultado.substring(0, 5000) + '\n\n[... resumo truncado por limite de tamanho]';
+  if (resultado.length > 3000) {
+    resultado = resultado.substring(0, 3000) + '\n\n[... resumo truncado por limite de tamanho]';
   }
   
   return resultado;
