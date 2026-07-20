@@ -135,8 +135,10 @@ app.post('/api/gerar-html', upload.any(), async (req, res) => {
     const csvRaw = csvFile.buffer.toString('utf-8');
     const destaquesClientes = req.body.destaquesClientes || '';
     const destaquesProfissionais = req.body.destaquesProfissionais || '';
+    const periodoInformado = req.body.periodo || '';
 
     let observacoes = '';
+    if (periodoInformado.trim()) observacoes += 'Período do relatório: ' + periodoInformado + '\n\n';
     if (destaquesClientes.trim()) observacoes += 'Destaques de Clientes:\n' + destaquesClientes + '\n\n';
     if (destaquesProfissionais.trim()) observacoes += 'Destaques de Profissionais:\n' + destaquesProfissionais + '\n\n';
 
@@ -193,8 +195,10 @@ app.post('/api/gerar-resumo-time', upload.any(), async (req, res) => {
     const csvRaw = csvFile.buffer.toString('utf-8');
     const destaquesClientes = req.body.destaquesClientes || '';
     const destaquesProfissionais = req.body.destaquesProfissionais || '';
+    const periodoInformado = req.body.periodo || '';
 
     let observacoes = '';
+    if (periodoInformado.trim()) observacoes += 'Período do relatório: ' + periodoInformado + '\n\n';
     if (destaquesClientes.trim()) observacoes += 'Destaques de Clientes:\n' + destaquesClientes + '\n\n';
     if (destaquesProfissionais.trim()) observacoes += 'Destaques de Profissionais:\n' + destaquesProfissionais + '\n\n';
 
