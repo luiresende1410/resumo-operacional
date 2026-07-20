@@ -258,6 +258,12 @@
       </div>
 
       <div class="field">
+        <label>📅 Período do Relatório</label>
+        <input type="text" id="periodo" placeholder="Ex: 14/07 a 18/07/2026" style="width:100%;background:#2d2d2d;border:1px solid #555;border-radius:6px;color:#e0e0e0;padding:12px;font-size:0.9rem;font-family:inherit;">
+        <small style="color:#666;font-size:0.75rem;margin-top:4px;display:block;">Informe o período que será exibido no relatório</small>
+      </div>
+
+      <div class="field">
         <label>🏢 Destaques de Clientes</label>
         <textarea id="destaquesClientes" placeholder="Informe contextos relevantes sobre clientes da semana (opcional).&#10;Exemplo:&#10;- ACME: iniciamos migração crítica para nova região&#10;- BETA: incidente resolvido em menos de 30min"></textarea>
       </div>
@@ -267,22 +273,13 @@
         <textarea id="destaquesProfissionais" placeholder="Informe destaques sobre a equipe (opcional).&#10;Exemplo:&#10;- João: liderou a resposta ao incidente&#10;- Maria: entregou documentação antes do prazo"></textarea>
       </div>
 
-      <button type="submit" class="btn-gerar" id="btnGerar">⚡ Gerar Relatório</button>
-      <button type="button" class="btn-gerar" id="btnGerarHTML" style="background: #2563eb; margin-top: 8px;">🎨 Gerar Relatório Visual (HTML)</button>
-      <button type="button" class="btn-gerar" id="btnGerarTime" style="background: #059669; margin-top: 8px;">👥 Gerar Resumo do Time</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;">
+        <button type="button" class="btn-gerar" id="btnGerarHTML" style="background:#2563eb;margin-bottom:0;">📘 Book de Serviços</button>
+        <button type="button" class="btn-gerar" id="btnGerarTime" style="background:#059669;margin-bottom:0;">📊 Relatório de Gestão</button>
+      </div>
     </form>
 
     <div class="msg" id="msg"></div>
-
-    <div class="resultado" id="resultado">
-      <h3>✅ Relatório Gerado</h3>
-      <div class="resultado-actions">
-        <button type="button" id="btnCopiar">📋 Copiar Texto</button>
-        <button type="button" id="btnBaixarMd">📝 Baixar .md</button>
-        <button type="button" id="btnAbrirDash">📊 Abrir Dashboard</button>
-      </div>
-      <pre id="relatorioTexto"></pre>
-    </div>
   </div>
 
   <div class="footer">
@@ -293,82 +290,9 @@
   </div>
 
   <script>
-    var form = document.getElementById('form');
     var msg = document.getElementById('msg');
     var resultado = document.getElementById('resultado');
     var relatorioTexto = document.getElementById('relatorioTexto');
-    var btnGerar = document.getElementById('btnGerar');
-    var dashboardHTML = null;
-    var relatorioMd = null;
-
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      console.log('Form submitted');
-
-      var fileInput = document.getElementById('csvFile');
-      if (!fileInput.files || !fileInput.files[0]) {
-        showMsg('error', '❌ Selecione um arquivo CSV antes de gerar.');
-        return;
-      }
-
-      btnGerar.disabled = true;
-      btnGerar.textContent = '⏳ Gerando... (pode levar até 1 minuto)';
-      hideMsg();
-      resultado.classList.remove('visible');
-
-      var formData = new FormData();
-      formData.append('csv', fileInput.files[0]);
-      formData.append('destaquesClientes', document.getElementById('destaquesClientes').value);
-      formData.append('destaquesProfissionais', document.getElementById('destaquesProfissionais').value);
-
-      fetch('/api/gerar', { method: 'POST', body: formData })
-        .then(function(response) {
-          return response.json().then(function(data) {
-            if (!response.ok) {
-              throw new Error(data.error || 'Erro desconhecido (HTTP ' + response.status + ')');
-            }
-            return data;
-          });
-        })
-        .then(function(data) {
-          relatorioMd = data.relatorio;
-          dashboardHTML = data.dashboardHTML;
-          relatorioTexto.textContent = relatorioMd;
-          resultado.classList.add('visible');
-          showMsg('success', '✅ Relatório gerado! ' + data.totalRegistros + ' atividades processadas.');
-        })
-        .catch(function(err) {
-          console.error('Erro:', err);
-          showMsg('error', '❌ ' + err.message);
-        })
-        .finally(function() {
-          btnGerar.disabled = false;
-          btnGerar.textContent = '⚡ Gerar Relatório';
-        });
-    });
-
-    document.getElementById('btnCopiar').addEventListener('click', function() {
-      if (relatorioMd) {
-        navigator.clipboard.writeText(relatorioMd).then(function() {
-          showMsg('success', '📋 Copiado para a área de transferência!');
-        });
-      }
-    });
-
-    document.getElementById('btnBaixarMd').addEventListener('click', function() {
-      if (relatorioMd) {
-        var data = new Date().toISOString().split('T')[0];
-        download(relatorioMd, 'relatorio-' + data + '.md', 'text/markdown');
-      }
-    });
-
-    document.getElementById('btnAbrirDash').addEventListener('click', function() {
-      if (dashboardHTML) {
-        var blob = new Blob([dashboardHTML], { type: 'text/html' });
-        var url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-      }
-    });
 
     function showMsg(type, text) {
       msg.style.display = 'block';
@@ -382,33 +306,29 @@
       msg.textContent = '';
     }
 
-    function download(content, filename, type) {
-      var blob = new Blob([content], { type: type });
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    // Gerar relatório HTML estilizado
-    document.getElementById('btnGerarHTML').addEventListener('click', function() {
+    function getFormData() {
       var fileInput = document.getElementById('csvFile');
       if (!fileInput.files || !fileInput.files[0]) {
         showMsg('error', '❌ Selecione um arquivo CSV antes de gerar.');
-        return;
+        return null;
       }
-
-      var btn = document.getElementById('btnGerarHTML');
-      btn.disabled = true;
-      btn.textContent = '⏳ Gerando relatório visual... (pode levar até 1 minuto)';
-      hideMsg();
-
       var formData = new FormData();
       formData.append('csv', fileInput.files[0]);
+      formData.append('periodo', document.getElementById('periodo').value);
       formData.append('destaquesClientes', document.getElementById('destaquesClientes').value);
       formData.append('destaquesProfissionais', document.getElementById('destaquesProfissionais').value);
+      return formData;
+    }
+
+    // Book de Serviços
+    document.getElementById('btnGerarHTML').addEventListener('click', function() {
+      var formData = getFormData();
+      if (!formData) return;
+
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = '⏳ Gerando Book de Serviços...';
+      hideMsg();
 
       fetch('/api/gerar-html', { method: 'POST', body: formData })
         .then(function(response) {
@@ -421,34 +341,26 @@
           var blob = new Blob([data.relatorioHTML], { type: 'text/html' });
           var url = URL.createObjectURL(blob);
           window.open(url, '_blank');
-          showMsg('success', '✅ Relatório visual gerado! Aberto em nova aba.');
+          showMsg('success', '✅ Book de Serviços gerado! Aberto em nova aba.');
         })
         .catch(function(err) {
-          console.error('Erro:', err);
           showMsg('error', '❌ ' + err.message);
         })
         .finally(function() {
           btn.disabled = false;
-          btn.textContent = '🎨 Gerar Relatório Visual (HTML)';
+          btn.textContent = '📘 Book de Serviços';
         });
     });
-    // Gerar Resumo do Time
+
+    // Relatório de Gestão
     document.getElementById('btnGerarTime').addEventListener('click', function() {
-      var fileInput = document.getElementById('csvFile');
-      if (!fileInput.files || !fileInput.files[0]) {
-        showMsg('error', '❌ Selecione um arquivo CSV antes de gerar.');
-        return;
-      }
+      var formData = getFormData();
+      if (!formData) return;
 
-      var btn = document.getElementById('btnGerarTime');
+      var btn = this;
       btn.disabled = true;
-      btn.textContent = '⏳ Gerando resumo do time... (pode levar até 1 minuto)';
+      btn.textContent = '⏳ Gerando Relatório de Gestão...';
       hideMsg();
-
-      var formData = new FormData();
-      formData.append('csv', fileInput.files[0]);
-      formData.append('destaquesClientes', document.getElementById('destaquesClientes').value);
-      formData.append('destaquesProfissionais', document.getElementById('destaquesProfissionais').value);
 
       fetch('/api/gerar-resumo-time', { method: 'POST', body: formData })
         .then(function(response) {
@@ -461,15 +373,14 @@
           var blob = new Blob([data.resumoHTML], { type: 'text/html' });
           var url = URL.createObjectURL(blob);
           window.open(url, '_blank');
-          showMsg('success', '✅ Resumo do Time gerado! Aberto em nova aba.');
+          showMsg('success', '✅ Relatório de Gestão gerado! Aberto em nova aba.');
         })
         .catch(function(err) {
-          console.error('Erro:', err);
           showMsg('error', '❌ ' + err.message);
         })
         .finally(function() {
           btn.disabled = false;
-          btn.textContent = '👥 Gerar Resumo do Time';
+          btn.textContent = '📊 Relatório de Gestão';
         });
     });
   </script>

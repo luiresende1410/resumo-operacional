@@ -55,9 +55,9 @@ RESPONDA APENAS COM O JSON.`;
 export function buildResumoTimeUserPrompt(csvContent, observacoes = '') {
   let prompt = `Dados de atividades da semana do time (CSV):\n\n${csvContent}`;
   if (observacoes) {
-    prompt += `\n\nObservações do gestor:\n${observacoes}`;
+    prompt += `\n\nObservações do gestor (use o período informado exatamente como fornecido):\n${observacoes}`;
   }
-  prompt += `\n\nGere o JSON estruturado conforme instruído.`;
+  prompt += `\n\nGere o JSON estruturado conforme instruído. Se o período foi informado nas observações, use-o no campo "periodo".`;
   return prompt;
 }
 
