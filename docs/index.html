@@ -490,9 +490,9 @@ document.getElementById('btnGerar').addEventListener('click', async () => {
       console.warn('Erro ao resumir CSV, usando original:', csvErr);
       csvResumido = csvRaw;
     }
-    // Garante limite de 6000 chars para caber no free tier
-    if (csvResumido.length > 6000) {
-      csvResumido = csvResumido.substring(0, 6000) + '\n[...truncado]';
+    // Garante limite de 4000 chars para caber no free tier
+    if (csvResumido.length > 4000) {
+      csvResumido = csvResumido.substring(0, 4000) + '\n[...truncado]';
     }
     console.log('[v2] Prompt tamanho final:', csvResumido.length);
     let userPrompt = 'Cliente: ' + nomeCliente + '\n\nAtividades do periodo:\n\n' + csvResumido;
@@ -632,7 +632,7 @@ document.getElementById('btnGerarGestao').addEventListener('click', async () => 
 
     let csvResumido;
     try { csvResumido = resumirCSV(csvRaw); } catch(e) { csvResumido = csvRaw; }
-    if (csvResumido.length > 6000) csvResumido = csvResumido.substring(0, 6000) + '\n[...truncado]';
+    if (csvResumido.length > 4000) csvResumido = csvResumido.substring(0, 4000) + '\n[...truncado]';
 
     let userPrompt = 'Dados de atividades da semana do time:\n\n' + csvResumido;
     userPrompt += '\n\n### METRICAS PRE-CALCULADAS (use EXATAMENTE estes valores nos KPIs):\n';
@@ -1049,8 +1049,8 @@ function resumirCSV(csv) {
   }
   
   // Limita tamanho total para caber nos limites de tokens das APIs gratuitas
-  if (resultado.length > 8000) {
-    resultado = resultado.substring(0, 8000) + '\n\n[... resumo truncado por limite de tamanho]';
+  if (resultado.length > 5000) {
+    resultado = resultado.substring(0, 5000) + '\n\n[... resumo truncado por limite de tamanho]';
   }
   
   return resultado;
