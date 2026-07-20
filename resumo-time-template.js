@@ -15,6 +15,8 @@ IMPORTANTE: Responda APENAS com JSON válido. Sem markdown, sem texto adicional.
 4. Destaque volume (quantidade de demandas) e esforço (horas).
 5. Reconheça profissionais com base em dados reais (horas, variedade, criticidade).
 6. Mantenha nomes de clientes em CAIXA ALTA.
+7. IMPORTANTE: Os KPIs (totalAtividades, totalHoras, totalClientes, totalProfissionais, mediaHorasPorProfissional) serão fornecidos pré-calculados nas observações. USE EXATAMENTE esses valores no campo "kpis". NÃO recalcule nem invente números diferentes.
+8. Para horas por cliente e por profissional, distribua proporcionalmente com base nos dados, mas o TOTAL deve bater com totalHoras fornecido.
 
 ### ESTRUTURA DO JSON:
 {
@@ -52,12 +54,25 @@ Um item por profissional em destaquesProfissionais.
 RESPONDA APENAS COM O JSON.`;
 
 
-export function buildResumoTimeUserPrompt(csvContent, observacoes = '') {
+export function buildResumoTimeUserPrompt(csvContent, observacoes = '', metricas = null) {
   let prompt = `Dados de atividades da semana do time (CSV):\n\n${csvContent}`;
+  
+  if (metricas) {
+    prompt += `\n\n### MÉTRICAS PRÉ-CALCULADAS (use EXATAMENTE estes valores nos KPIs):
+- Total de Atividades: ${metricas.totalAtividades}
+- Total de Horas: ${metricas.totalHoras}
+- Total de Clientes: ${metricas.totalClientes}
+- Total de Profissionais: ${metricas.totalProfissionais}
+- Média de Horas por Profissional: ${metricas.mediaHorasPorProfissional}
+- Horas por Cliente: ${JSON.stringify(metricas.horasPorCliente)}
+- Horas por Profissional: ${JSON.stringify(metricas.horasPorProfissional)}
+- Atividades por Status: ${JSON.stringify(metricas.atividadesPorStatus)}`;
+  }
+  
   if (observacoes) {
     prompt += `\n\nObservações do gestor (use o período informado exatamente como fornecido):\n${observacoes}`;
   }
-  prompt += `\n\nGere o JSON estruturado conforme instruído. Se o período foi informado nas observações, use-o no campo "periodo".`;
+  prompt += `\n\nGere o JSON estruturado conforme instruído. Use os KPIs pré-calculados fornecidos acima SEM alteração.`;
   return prompt;
 }
 

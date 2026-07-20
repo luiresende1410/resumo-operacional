@@ -627,13 +627,24 @@ document.getElementById('btnGerarGestao').addEventListener('click', async () => 
     if (periodoInformado) obs += 'Periodo do relatorio: ' + periodoInformado + '\n\n';
     if (observacoes) obs += 'Observacoes do gestor:\n' + observacoes + '\n\n';
 
+    // Calcular metricas localmente para garantir dados corretos
+    const metricasLocais = calcularMetricasTimeLocal(csvRaw);
+
     let csvResumido;
     try { csvResumido = resumirCSV(csvRaw); } catch(e) { csvResumido = csvRaw; }
     if (csvResumido.length > 6000) csvResumido = csvResumido.substring(0, 6000) + '\n[...truncado]';
 
     let userPrompt = 'Dados de atividades da semana do time:\n\n' + csvResumido;
-    if (obs) userPrompt += '\n\n' + obs;
-    userPrompt += '\n\nGere o JSON estruturado conforme instruido. Se o periodo foi informado, use-o no campo "periodo".';
+    userPrompt += '\n\n### METRICAS PRE-CALCULADAS (use EXATAMENTE estes valores nos KPIs):\n';
+    userPrompt += '- Total de Atividades: ' + metricasLocais.totalAtividades + '\n';
+    userPrompt += '- Total de Horas: ' + metricasLocais.totalHoras + '\n';
+    userPrompt += '- Total de Clientes: ' + metricasLocais.totalClientes + '\n';
+    userPrompt += '- Total de Profissionais: ' + metricasLocais.totalProfissionais + '\n';
+    userPrompt += '- Media de Horas por Profissional: ' + metricasLocais.mediaHorasPorProfissional + '\n';
+    userPrompt += '- Horas por Cliente: ' + JSON.stringify(metricasLocais.horasPorCliente) + '\n';
+    userPrompt += '- Horas por Profissional: ' + JSON.stringify(metricasLocais.horasPorProfissional) + '\n';
+    if (obs) userPrompt += '\n' + obs;
+    userPrompt += '\nGere o JSON estruturado conforme instruido. Use os KPIs pre-calculados SEM alteracao.';
 
     const response = await chamarIA(userPrompt, RESUMO_TIME_PROMPT, btn);
     const jsonText = response.text;
@@ -651,6 +662,22 @@ document.getElementById('btnGerarGestao').addEventListener('click', async () => 
       resumoData = JSON.parse(fixed);
     }
 
+    // Sobrescrever KPIs com valores calculados localmente
+    resumoData.kpis = {
+      totalAtividades: metricasLocais.totalAtividades,
+      totalHoras: metricasLocais.totalHoras,
+      totalClientes: metricasLocais.totalClientes,
+      totalProfissionais: metricasLocais.totalProfissionais,
+      mediaHorasPorProfissional: metricasLocais.mediaHorasPorProfissional,
+    };
+    // Corrigir horas por cliente
+    if (resumoData.atividadesPorCliente) {
+      for (const item of resumoData.atividadesPorCliente) {
+        const clienteKey = Object.keys(metricasLocais.horasPorCliente).find(k => k.toUpperCase() === item.cliente.toUpperCase());
+        if (clienteKey) item.horas = Math.round(metricasLocais.horasPorCliente[clienteKey] * 10) / 10;
+      }
+    }
+
     const html = buildResumoTimeVisualHTML(resumoData);
     const blob = new Blob([html], {type:'text/html'});
     window.open(URL.createObjectURL(blob), '_blank');
@@ -662,6 +689,51 @@ document.getElementById('btnGerarGestao').addEventListener('click', async () => 
     btn.disabled = false; btn.textContent = '\u{1F4CA} Relatorio de Gestao';
   }
 });
+
+function calcularMetricasTimeLocal(csv) {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return { totalAtividades: 0, totalHoras: 0, totalClientes: 0, totalProfissionais: 0, mediaHorasPorProfissional: 0, horasPorCliente: {}, horasPorProfissional: {} };
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const cols = lines[0].split(sep).map(c => c.trim().toLowerCase().replace(/"/g, ''));
+  const iCliente = cols.findIndex(c => c.includes('cliente') || c.includes('organiz'));
+  const iNome = cols.findIndex(c => c.includes('nome') || c.includes('responsavel') || c.includes('assignee'));
+  const iHoras = cols.findIndex(c => c.includes('hora') || c.includes('hours') || c.includes('tempo'));
+  const iStatus = cols.findIndex(c => c.includes('status'));
+
+  const horasPorCliente = {};
+  const horasPorProfissional = {};
+  const atividadesPorStatus = {};
+  let totalHoras = 0;
+  let totalAtividades = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const parts = splitCSVLine(lines[i], sep);
+    if (parts.length < 2) continue;
+    totalAtividades++;
+    const cliente = (iCliente >= 0 && parts[iCliente]) ? parts[iCliente].trim() : 'Sem cliente';
+    const nome = (iNome >= 0 && parts[iNome]) ? parts[iNome].trim() : 'Nao identificado';
+    const horas = (iHoras >= 0 && parts[iHoras]) ? (parseFloat(parts[iHoras].replace(',', '.')) || 0) : 0;
+    const status = (iStatus >= 0 && parts[iStatus]) ? parts[iStatus].trim() : 'Sem status';
+    totalHoras += horas;
+    horasPorCliente[cliente] = (horasPorCliente[cliente] || 0) + horas;
+    horasPorProfissional[nome] = (horasPorProfissional[nome] || 0) + horas;
+    atividadesPorStatus[status] = (atividadesPorStatus[status] || 0) + 1;
+  }
+
+  const totalClientes = Object.keys(horasPorCliente).length;
+  const totalProfissionais = Object.keys(horasPorProfissional).length;
+  return {
+    totalAtividades,
+    totalHoras: Math.round(totalHoras * 10) / 10,
+    totalClientes,
+    totalProfissionais,
+    mediaHorasPorProfissional: totalProfissionais > 0 ? Math.round((totalHoras / totalProfissionais) * 10) / 10 : 0,
+    horasPorCliente,
+    horasPorProfissional,
+    atividadesPorStatus,
+  };
+}
 
 function buildResumoTimeVisualHTML(data) {
   const { periodo, resumoExecutivo, kpis, atividadesPorCliente, atividadesPorPilar, topAtividades, destaquesProfissionais, volumePorStatus } = data;

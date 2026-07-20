@@ -205,9 +205,13 @@ app.post('/api/gerar-resumo-time', upload.any(), async (req, res) => {
     console.log('[API] Gerando Resumo Gerencial do Time...');
     const ai = new GoogleGenAI({ apiKey });
 
+    // Calcular métricas localmente para garantir dados corretos
+    const records = parse(csvRaw, { columns: true, skip_empty_lines: true, trim: true });
+    const metricasLocais = calcularMetricasTime(records);
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: buildResumoTimeUserPrompt(csvRaw, observacoes),
+      contents: buildResumoTimeUserPrompt(csvRaw, observacoes, metricasLocais),
       config: {
         systemInstruction: RESUMO_TIME_SYSTEM_PROMPT,
         temperature: 0.7,
@@ -229,6 +233,28 @@ app.post('/api/gerar-resumo-time', upload.any(), async (req, res) => {
     }
 
     const dataHoje = new Date().toISOString().split('T')[0];
+    
+    // Sobrescrever KPIs com valores calculados localmente (Gemini pode inventar)
+    resumoData.kpis = {
+      totalAtividades: metricasLocais.totalAtividades,
+      totalHoras: metricasLocais.totalHoras,
+      totalClientes: metricasLocais.totalClientes,
+      totalProfissionais: metricasLocais.totalProfissionais,
+      mediaHorasPorProfissional: metricasLocais.mediaHorasPorProfissional,
+    };
+    
+    // Corrigir horas por cliente se houver dados
+    if (resumoData.atividadesPorCliente) {
+      for (const item of resumoData.atividadesPorCliente) {
+        const clienteKey = Object.keys(metricasLocais.horasPorCliente).find(
+          k => k.toUpperCase() === item.cliente.toUpperCase()
+        );
+        if (clienteKey) {
+          item.horas = Math.round(metricasLocais.horasPorCliente[clienteKey] * 10) / 10;
+        }
+      }
+    }
+
     const resumoHTML = gerarResumoTimeHTML(resumoData, dataHoje);
 
     console.log('[API] Resumo do Time gerado com sucesso.');
@@ -272,6 +298,41 @@ app.post('/api/preview', upload.any(), (req, res) => {
     res.status(400).json({ error: 'Erro ao ler CSV: ' + err.message });
   }
 });
+
+function calcularMetricasTime(records) {
+  const horasPorCliente = {};
+  const horasPorProfissional = {};
+  const atividadesPorStatus = {};
+  let totalHoras = 0;
+
+  for (const r of records) {
+    const cliente = r.Cliente || 'Sem cliente';
+    const nome = r.Nome || 'Não identificado';
+    const status = r.Status || 'Sem status';
+    const horas = parseFloat(r.Horas) || 0;
+
+    totalHoras += horas;
+    horasPorCliente[cliente] = (horasPorCliente[cliente] || 0) + horas;
+    horasPorProfissional[nome] = (horasPorProfissional[nome] || 0) + horas;
+    atividadesPorStatus[status] = (atividadesPorStatus[status] || 0) + 1;
+  }
+
+  const totalClientes = Object.keys(horasPorCliente).length;
+  const totalProfissionais = Object.keys(horasPorProfissional).length;
+  const totalAtividades = records.length;
+  const mediaHorasPorProfissional = totalProfissionais > 0 ? Math.round((totalHoras / totalProfissionais) * 10) / 10 : 0;
+
+  return {
+    totalAtividades,
+    totalHoras: Math.round(totalHoras * 10) / 10,
+    totalClientes,
+    totalProfissionais,
+    mediaHorasPorProfissional,
+    horasPorCliente,
+    horasPorProfissional,
+    atividadesPorStatus,
+  };
+}
 
 function calcularMetricas(records) {
   const horasPorCliente = {};
