@@ -679,9 +679,15 @@ document.getElementById('btnGerarGestao').addEventListener('click', async () => 
     }
 
     const html = buildResumoTimeVisualHTML(resumoData);
-    const blob = new Blob([html], {type:'text/html'});
-    window.open(URL.createObjectURL(blob), '_blank');
-    showMsg('success','Relatorio de Gestao gerado! Aberto em nova aba.');
+    
+    // Gerar Markdown do resumo do time
+    relatorioMd = resumoTimeToMarkdown(resumoData);
+    relatorioVisualHTML = html;
+    
+    // Mostrar preview e ações de download
+    document.getElementById('relatorioHtml').innerHTML = marked.parse(relatorioMd);
+    document.getElementById('resultado').classList.add('visible');
+    showMsg('success','Relatorio de Gestao gerado! Use os botoes para exportar.');
   } catch(err) {
     console.error(err);
     showMsg('error', err.message);
@@ -733,6 +739,44 @@ function calcularMetricasTimeLocal(csv) {
     horasPorProfissional,
     atividadesPorStatus,
   };
+}
+
+function resumoTimeToMarkdown(r) {
+  let md = '# Resumo Gerencial do Time\n\n';
+  md += '**Periodo:** ' + (r.periodo || '?') + '\n\n';
+  md += '## Resumo Executivo\n\n' + (r.resumoExecutivo || '') + '\n\n';
+  md += '## KPIs\n\n';
+  if (r.kpis) {
+    md += '| Indicador | Valor |\n|-----------|-------|\n';
+    md += '| Atividades | ' + r.kpis.totalAtividades + ' |\n';
+    md += '| Horas Trabalhadas | ' + r.kpis.totalHoras + 'h |\n';
+    md += '| Clientes Atendidos | ' + r.kpis.totalClientes + ' |\n';
+    md += '| Profissionais | ' + r.kpis.totalProfissionais + ' |\n';
+    md += '| Media por Profissional | ' + r.kpis.mediaHorasPorProfissional + 'h |\n\n';
+  }
+  md += '## Esforco por Pilar\n\n';
+  for (const p of (r.atividadesPorPilar || [])) {
+    md += '### ' + p.pilar + ' (' + p.percentual + '% - ' + p.horas + 'h)\n\n';
+    for (const d of (p.destaques || [])) md += '- ' + d + '\n';
+    md += '\n';
+  }
+  md += '## Principais Entregas da Semana\n\n';
+  md += '| # | Atividade | Cliente | Profissional | Horas | Impacto |\n|---|-----------|---------|--------------|-------|----------|\n';
+  for (const [i, a] of (r.topAtividades || []).entries()) {
+    md += '| ' + (i+1) + ' | ' + a.titulo + ' | ' + a.cliente + ' | ' + a.profissional + ' | ' + a.horas + 'h | ' + a.impacto + ' |\n';
+  }
+  md += '\n## Volume por Cliente\n\n';
+  md += '| Cliente | Atividades | Horas | Principais Entregas |\n|---------|------------|-------|---------------------|\n';
+  for (const c of (r.atividadesPorCliente || [])) {
+    md += '| ' + c.cliente + ' | ' + c.atividades + ' | ' + c.horas + 'h | ' + (c.principaisEntregas || []).join('; ') + ' |\n';
+  }
+  md += '\n## Destaques do Time\n\n';
+  for (const p of (r.destaquesProfissionais || [])) {
+    md += '### ' + p.nome + '\n\n';
+    md += '- ' + p.atividades + ' atividades | ' + p.horas + 'h | ' + (p.clientes || []).length + ' cliente(s)\n';
+    md += '- ' + p.destaque + '\n\n';
+  }
+  return md;
 }
 
 function buildResumoTimeVisualHTML(data) {
